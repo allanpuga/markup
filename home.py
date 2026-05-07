@@ -16,25 +16,26 @@ def init_db():
     conn.commit()
     conn.close()
 
-# 2. Novas Funções da API da FIPE (Com Cache para ficar ultrarrápido)
+# 2. Novas Funções da API da FIPE (Com Cache e Anti-Bloqueio)
+headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+
 @st.cache_data
 def get_marcas():
-    # Adicionamos o verify=False no final
-    resposta = requests.get("https://parallelum.com.br/fipe/api/v1/carros/marcas", verify=False)
+    resposta = requests.get("https://parallelum.com.br/fipe/api/v1/carros/marcas", headers=headers, verify=False)
     return resposta.json() if resposta.status_code == 200 else []
 
 @st.cache_data
 def get_modelos(marca_id):
-    resposta = requests.get(f"https://parallelum.com.br/fipe/api/v1/carros/marcas/{marca_id}/modelos", verify=False)
+    resposta = requests.get(f"https://parallelum.com.br/fipe/api/v1/carros/marcas/{marca_id}/modelos", headers=headers, verify=False)
     return resposta.json()['modelos'] if resposta.status_code == 200 else []
 
 @st.cache_data
 def get_anos(marca_id, modelo_id):
-    resposta = requests.get(f"https://parallelum.com.br/fipe/api/v1/carros/marcas/{marca_id}/modelos/{modelo_id}/anos", verify=False)
+    resposta = requests.get(f"https://parallelum.com.br/fipe/api/v1/carros/marcas/{marca_id}/modelos/{modelo_id}/anos", headers=headers, verify=False)
     return resposta.json() if resposta.status_code == 200 else []
 
 def get_valor_fipe(marca_id, modelo_id, ano_id):
-    resposta = requests.get(f"https://parallelum.com.br/fipe/api/v1/carros/marcas/{marca_id}/modelos/{modelo_id}/anos/{ano_id}", verify=False)
+    resposta = requests.get(f"https://parallelum.com.br/fipe/api/v1/carros/marcas/{marca_id}/modelos/{modelo_id}/anos/{ano_id}", headers=headers, verify=False)
     return resposta.json() if resposta.status_code == 200 else None
 
 # 3. Interface de Login
