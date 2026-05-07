@@ -2,64 +2,63 @@ import streamlit as st
 import sqlite3
 import requests
 
-# 1. Configuração do Banco de Dados
+# 1. Banco de Dados
 def init_db():
     conn = sqlite3.connect('markup_motoristas.db')
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS usuarios 
-                 (id INTEGER PRIMARY KEY, username TEXT, password TEXT)''')
-    
+    c.execute('''CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, username TEXT, password TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS perfil_motorista 
                  (id INTEGER PRIMARY KEY, user_id TEXT, nome TEXT, email TEXT, 
                   cidade TEXT, whatsapp TEXT, dias_semana INTEGER, horas_dia INTEGER, 
-                  marca TEXT, modelo TEXT, ano TEXT, codigo_fipe TEXT, valor_fipe TEXT)''')
+                  km_dia REAL, marca TEXT, modelo TEXT, ano TEXT, codigo_fipe TEXT, valor_fipe TEXT)''')
     conn.commit()
     conn.close()
 
-# 2. Nova API FIPE (Versão 2 - Mais estável e atualizada)
+# 2. APIs (FIPE e IPCA)
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
 @st.cache_data(ttl=3600)
 def get_marcas():
     try:
         url = "https://fipe.parallelum.com.br/api/v2/cars/brands"
-        resposta = requests.get(url, headers=headers)
-        return resposta.json() if resposta.status_code == 200 else []
-    except:
-        return []
+        return requests.get(url, headers=headers).json()
+    except: return []
 
 @st.cache_data(ttl=3600)
 def get_modelos(marca_id):
     try:
         url = f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models"
-        resposta = requests.get(url, headers=headers)
-        return resposta.json() if resposta.status_code == 200 else []
-    except:
-        return []
+        return requests.get(url, headers=headers).json()
+    except: return []
 
 @st.cache_data(ttl=3600)
 def get_anos(marca_id, modelo_id):
     try:
         url = f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models/{modelo_id}/years"
-        resposta = requests.get(url, headers=headers)
-        return resposta.json() if resposta.status_code == 200 else []
-    except:
-        return []
+        return requests.get(url, headers=headers).json()
+    except: return []
 
 def get_valor_fipe(marca_id, modelo_id, ano_id):
     try:
         url = f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models/{modelo_id}/years/{ano_id}"
-        resposta = requests.get(url, headers=headers)
-        return resposta.json() if resposta.status_code == 200 else None
-    except:
-        return None
+        return requests.get(url, headers=headers).json()
+    except: return None
 
-# 3. Interface de Login
+@st.cache_data(ttl=86400) # Atualiza 1x por dia
+def get_ipca():
+    try:
+        # Busca IPCA acumulado 12 meses direto do Banco Central do Brasil
+        url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.13522/dados/ultimos/1"
+        res = requests.get(url)
+        return float(res.json()[0]['valor'])
+    except:
+        return 4.50 # Valor padrão caso a API do governo falhe
+
+# 3. Login
 def login_page():
     st.header("Login do Motorista")
     username = st.text_input("Usuário")
     password = st.text_input("Senha", type="password")
-    
     if st.button("Entrar"):
         if username == "admin" and password == "123": 
             st.session_state['logged_in'] = True
@@ -68,97 +67,149 @@ def login_page():
         else:
             st.error("Usuário ou senha incorretos")
 
-# 4. Interface Principal (Totalmente Dinâmica)
+# 4. Interface Principal
 def main_app():
     st.sidebar.title("Menu")
-    st.sidebar.write(f"Usuário logado: {st.session_state['username']}")
     if st.sidebar.button("Sair"):
         st.session_state['logged_in'] = False
         st.rerun()
 
-    st.title("📝 Formulário de Captação e Markup")
-    st.markdown("Preencha seus dados para calcularmos o seu custo operacional real.")
+    st.title("📊 Calculadora de Markup")
 
-    st.subheader("1. Informações Pessoais")
-    col1, col2 = st.columns(2)
+    # --- CAPTAÇÃO DE DADOS ---
+    st.subheader("1. Informações e Jornada")
+    col1, col2, col3 = st.columns(3)
     with col1:
-        nome = st.text_input("Nome Completo")
-        email = st.text_input("E-mail")
+        dias_semana = st.number_input("Dias na semana (DS)", min_value=1, max_value=7, value=6)
     with col2:
-        cidade = st.text_input("Cidade/Estado")
-        whatsapp = st.text_input("WhatsApp")
-
-    st.subheader("2. Jornada de Trabalho")
-    col3, col4 = st.columns(2)
+        horas_dia = st.number_input("Horas por dia (HD)", min_value=1, max_value=24, value=8)
     with col3:
-        dias_semana = st.number_input("Dias trabalhados na semana (DS)", min_value=1, max_value=7, value=6)
-    with col4:
-        horas_dia = st.number_input("Horas trabalhadas por dia (HD)", min_value=1, max_value=24, value=8)
+        km_dia = st.number_input("KM Médio por dia", min_value=10, max_value=800, value=150)
 
-    st.subheader("3. Dados do Veículo (Busca Automática)")
-    
-    # Busca Inicial de Marcas
+    st.subheader("2. Dados do Veículo")
     marcas = get_marcas()
-    
-    if not marcas:
-        st.warning("⚠️ Aguardando conexão com a base da FIPE... (Verifique a internet ou recarregue a página)")
-        return
+    if not marcas: return
         
     marca_dict = {m['name']: str(m['code']) for m in marcas}
-    marca_selecionada = st.selectbox("Selecione a Marca", options=["Selecione..."] + list(marca_dict.keys()))
+    marca_selecionada = st.selectbox("Marca", ["Selecione..."] + list(marca_dict.keys()))
 
     if marca_selecionada != "Selecione...":
         marca_id = marca_dict[marca_selecionada]
         modelos = get_modelos(marca_id)
-        
         if modelos:
             modelo_dict = {m['name']: str(m['code']) for m in modelos}
-            modelo_selecionado = st.selectbox("Selecione o Modelo", options=["Selecione..."] + list(modelo_dict.keys()))
+            modelo_selecionado = st.selectbox("Modelo", ["Selecione..."] + list(modelo_dict.keys()))
             
             if modelo_selecionado != "Selecione...":
                 modelo_id = modelo_dict[modelo_selecionado]
                 anos = get_anos(marca_id, modelo_id)
-                
                 if anos:
                     ano_dict = {a['name']: str(a['code']) for a in anos}
-                    ano_selecionado = st.selectbox("Selecione o Ano de Fabricação", options=["Selecione..."] + list(ano_dict.keys()))
+                    ano_selecionado = st.selectbox("Ano", ["Selecione..."] + list(ano_dict.keys()))
                     
                     if ano_selecionado != "Selecione...":
                         ano_id = ano_dict[ano_selecionado]
                         
-                        st.markdown("---")
-                        if st.button("Salvar e Consultar Preço Real"):
-                            with st.spinner("Buscando valor oficial na base FIPE..."):
+                        if st.button("Consultar FIPE e Abrir Calculadora"):
+                            with st.spinner("Buscando base FIPE..."):
                                 dados_veiculo = get_valor_fipe(marca_id, modelo_id, ano_id)
-                                
                                 if dados_veiculo:
-                                    valor = dados_veiculo['price']
-                                    codigo_fipe_real = dados_veiculo['codeFipe']
-                                    mes_ref = dados_veiculo['referenceMonth']
+                                    # Transforma a string "R$ 45.000,00" em número (45000.00)
+                                    fipe_str = dados_veiculo['price']
+                                    fipe_float = float(fipe_str.replace('R$', '').replace('.', '').replace(',', '.').strip())
                                     
-                                    st.success(f"Veículo encontrado! Valor: **{valor}** (Código Fipe Oculto: {codigo_fipe_real} - Ref: {mes_ref})")
-                                    
-                                    # Salvando no BD
-                                    conn = sqlite3.connect('markup_motoristas.db')
-                                    c = conn.cursor()
-                                    c.execute('''INSERT INTO perfil_motorista 
-                                                 (user_id, nome, email, cidade, whatsapp, dias_semana, horas_dia, marca, modelo, ano, codigo_fipe, valor_fipe)
-                                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-                                              (st.session_state['username'], nome, email, cidade, whatsapp, dias_semana, horas_dia, 
-                                               marca_selecionada, modelo_selecionado, ano_selecionado, codigo_fipe_real, valor))
-                                    conn.commit()
-                                    conn.close()
-                                    st.info("Dados salvos com sucesso na base nacional!")
-                                else:
-                                    st.error("Erro ao buscar o valor final na FIPE. Tente novamente.")
+                                    st.session_state['fipe_float'] = fipe_float
+                                    st.session_state['fipe_str'] = fipe_str
+                                    st.success(f"FIPE: **{fipe_str}**")
 
-# 5. Controle de Fluxo
+    # --- CALCULADORA FINANCEIRA (Só aparece após pegar a FIPE) ---
+    if 'fipe_float' in st.session_state:
+        st.markdown("---")
+        st.header("⚙️ Custos Operacionais")
+        
+        # CUSTOS FIXOS
+        with st.expander("📝 Custo Fixo (CF)", expanded=True):
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                cf_ipva = st.number_input("CF2 - IPVA (Anual R$)", value=st.session_state['fipe_float'] * 0.04)
+                cf_licenciamento = st.number_input("CF3 - Licenciamento (Anual R$)", value=160.0)
+                cf_seguro_obrig = st.number_input("CF4 - Seguro Obrigatório (Anual R$)", value=50.0)
+                cf_seguro_carro = st.number_input("CF5 - Seguro do Carro (Anual R$)", value=2500.0)
+            with col_f2:
+                cf_parcela = st.number_input("CF6 - Parcela Fin. / Aluguel (Mensal R$)", value=0.0)
+                cf_salario = st.number_input("CF7 - Salário DIEESE (Mensal R$)", value=7200.0)
+                cf_inss = st.number_input("CF8 - INSS (11% Salário Mín Mensal R$)", value=155.32)
+                cf_internet = st.number_input("CF9 - Internet Celular (Mensal R$)", value=60.0)
+                
+            # Matemática Oculta CF Mensal
+            cf_depreciacao_mensal = (st.session_state['fipe_float'] * 0.24) / 12
+            total_cf_mensal = (cf_ipva/12) + (cf_licenciamento/12) + (cf_seguro_obrig/12) + (cf_seguro_carro/12) + cf_parcela + cf_salario + cf_inss + cf_internet + cf_depreciacao_mensal
+            st.info(f"Depreciação Automática (24% aa): R$ {cf_depreciacao_mensal:.2f}/mês")
+
+        # CUSTOS VARIÁVEIS
+        with st.expander("⛽ Custo Variável (CV)"):
+            col_v1, col_v2 = st.columns(2)
+            with col_v1:
+                cv_alim_dia = st.number_input("CV1 - Alimentação (Por Dia R$)", value=30.0)
+                cv_comb_dia = st.number_input("CV2 - Combustível (Por Dia R$)", value=100.0)
+                cv_oleo = st.number_input("CV3 - Troca de Óleo/Filtro (Valor por 10k KM R$)", value=250.0)
+                cv_pneu = st.number_input("CV4 - Jogo de Pneus (Valor por 30k KM R$)", value=1600.0)
+            with col_v2:
+                cv_manut_mensal = st.number_input("CV5 - Manutenção Preventiva Básica (Mensal R$)", value=150.0)
+                cv_lavagem = st.number_input("CV6 - Lavagem (Mensal R$)", value=120.0)
+                cv_alinhamento = st.number_input("CV7 - Alinhamento/Balanceamento (Por 10k KM R$)", value=100.0)
+            
+            # Matemática Oculta CV Mensal
+            dias_mensais = dias_semana * 4.33
+            km_mensal = km_dia * dias_mensais
+            
+            total_cv_mensal = (cv_alim_dia * dias_mensais) + (cv_comb_dia * dias_mensais) + \
+                              cv_manut_mensal + cv_lavagem + \
+                              (cv_oleo / 10000 * km_mensal) + \
+                              (cv_pneu / 30000 * km_mensal) + \
+                              (cv_alinhamento / 10000 * km_mensal)
+
+        # CUSTOS PERCENTUAIS
+        with st.expander("📈 Custo Percentual (CP)"):
+            ipca_atual = get_ipca()
+            st.write(f"**CP4 - Inflação IPCA (Automático Banco Central):** {ipca_atual}%")
+            
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                cp_iss = st.number_input("CP2 - ISS / IBS (%)", value=5.0)
+                margem_iss = st.number_input("Margem de Lucro Base ISS (%)", value=20.0)
+            with col_p2:
+                cp_icms = st.number_input("CP3 - ICMS / IBS (%)", value=0.0)
+                margem_icms = st.number_input("Margem de Lucro Base ICMS (%)", value=20.0)
+
+        # RESUMO MARKUP
+        if st.button("Gerar Relatório de Markup", type="primary"):
+            st.markdown("### 🏆 Seu Markup Mensal")
+            
+            # CP1 - IRPF 11% sobre 60% de CF+CV
+            cp_irpf = ((total_cf_mensal + total_cv_mensal) * 0.60) * 0.11
+            
+            col_r1, col_r2 = st.columns(2)
+            col_r1.metric("Total Custo Fixo (Mensal)", f"R$ {total_cf_mensal:.2f}")
+            col_r2.metric("Total Custo Variável (Mensal)", f"R$ {total_cv_mensal:.2f}")
+            col_r1.metric("IRPF (11% sobre 60% CF+CV)", f"R$ {cp_irpf:.2f}")
+            
+            # Cálculo final base (Preço = Custo / (1 - Margem - Impostos))
+            custo_base_total = total_cf_mensal + total_cv_mensal + cp_irpf
+            
+            try:
+                # Faturamento necessário para cobrir os custos e ter a margem desejada
+                faturamento_meta_iss = custo_base_total / (1 - (cp_iss/100) - (margem_iss/100))
+                faturamento_meta_icms = custo_base_total / (1 - (cp_icms/100) - (margem_icms/100))
+                
+                st.success(f"🎯 Faturamento Meta (Com ISS e {margem_iss}% Lucro): **R$ {faturamento_meta_iss:.2f} / mês**")
+                st.info(f"💵 Valor Mínimo por KM Rodado: **R$ {faturamento_meta_iss / km_mensal:.2f}**")
+                
+            except ZeroDivisionError:
+                st.error("A soma dos percentuais não pode ser 100% ou maior.")
+
+# Controle Fluxo
 init_db()
-
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
-
-if not st.session_state['logged_in']:
-    login_page()
-else:
-    main_app()
+if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
+if not st.session_state['logged_in']: login_page()
+else: main_app()
