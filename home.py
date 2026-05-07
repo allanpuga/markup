@@ -16,27 +16,43 @@ def init_db():
     conn.commit()
     conn.close()
 
-# 2. Novas Funções da API da FIPE (Com Cache e Anti-Bloqueio)
-headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+# 2. Nova API FIPE (Versão 2 - Mais estável e atualizada)
+headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_marcas():
-    resposta = requests.get("https://parallelum.com.br/fipe/api/v1/carros/marcas", headers=headers, verify=False)
-    return resposta.json() if resposta.status_code == 200 else []
+    try:
+        url = "https://fipe.parallelum.com.br/api/v2/cars/brands"
+        resposta = requests.get(url, headers=headers)
+        return resposta.json() if resposta.status_code == 200 else []
+    except:
+        return []
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_modelos(marca_id):
-    resposta = requests.get(f"https://parallelum.com.br/fipe/api/v1/carros/marcas/{marca_id}/modelos", headers=headers, verify=False)
-    return resposta.json()['modelos'] if resposta.status_code == 200 else []
+    try:
+        url = f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models"
+        resposta = requests.get(url, headers=headers)
+        return resposta.json() if resposta.status_code == 200 else []
+    except:
+        return []
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_anos(marca_id, modelo_id):
-    resposta = requests.get(f"https://parallelum.com.br/fipe/api/v1/carros/marcas/{marca_id}/modelos/{modelo_id}/anos", headers=headers, verify=False)
-    return resposta.json() if resposta.status_code == 200 else []
+    try:
+        url = f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models/{modelo_id}/years"
+        resposta = requests.get(url, headers=headers)
+        return resposta.json() if resposta.status_code == 200 else []
+    except:
+        return []
 
 def get_valor_fipe(marca_id, modelo_id, ano_id):
-    resposta = requests.get(f"https://parallelum.com.br/fipe/api/v1/carros/marcas/{marca_id}/modelos/{modelo_id}/anos/{ano_id}", headers=headers, verify=False)
-    return resposta.json() if resposta.status_code == 200 else None
+    try:
+        url = f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models/{modelo_id}/years/{ano_id}"
+        resposta = requests.get(url, headers=headers)
+        return resposta.json() if resposta.status_code == 200 else None
+    except:
+        return None
 
 # 3. Interface de Login
 def login_page():
@@ -63,7 +79,6 @@ def main_app():
     st.title("📝 Formulário de Captação e Markup")
     st.markdown("Preencha seus dados para calcularmos o seu custo operacional real.")
 
-    # Removido o "st.form" para permitir que as caixas de seleção atualizem em tempo real
     st.subheader("1. Informações Pessoais")
     col1, col2 = st.columns(2)
     with col1:
@@ -82,54 +97,62 @@ def main_app():
 
     st.subheader("3. Dados do Veículo (Busca Automática)")
     
-    # --- LÓGICA DINÂMICA DA FIPE EM TRÊS PASSOS ---
+    # Busca Inicial de Marcas
     marcas = get_marcas()
-    marca_dict = {m['nome']: m['codigo'] for m in marcas}
+    
+    if not marcas:
+        st.warning("⚠️ Aguardando conexão com a base da FIPE... (Verifique a internet ou recarregue a página)")
+        return
+        
+    marca_dict = {m['name']: str(m['code']) for m in marcas}
     marca_selecionada = st.selectbox("Selecione a Marca", options=["Selecione..."] + list(marca_dict.keys()))
 
     if marca_selecionada != "Selecione...":
         marca_id = marca_dict[marca_selecionada]
         modelos = get_modelos(marca_id)
-        modelo_dict = {m['nome']: m['codigo'] for m in modelos}
-        modelo_selecionado = st.selectbox("Selecione o Modelo", options=["Selecione..."] + list(modelo_dict.keys()))
         
-        if modelo_selecionado != "Selecione...":
-            modelo_id = modelo_dict[modelo_selecionado]
-            anos = get_anos(marca_id, modelo_id)
-            ano_dict = {a['nome']: a['codigo'] for a in anos}
-            ano_selecionado = st.selectbox("Selecione o Ano de Fabricação", options=["Selecione..."] + list(ano_dict.keys()))
+        if modelos:
+            modelo_dict = {m['name']: str(m['code']) for m in modelos}
+            modelo_selecionado = st.selectbox("Selecione o Modelo", options=["Selecione..."] + list(modelo_dict.keys()))
             
-            if ano_selecionado != "Selecione...":
-                ano_id = ano_dict[ano_selecionado]
+            if modelo_selecionado != "Selecione...":
+                modelo_id = modelo_dict[modelo_selecionado]
+                anos = get_anos(marca_id, modelo_id)
                 
-                # Quando o motorista preenche a última etapa (Ano), o botão de salvar aparece
-                st.markdown("---")
-                if st.button("Salvar e Consultar Preço Real"):
-                    with st.spinner("Buscando valor oficial na base FIPE..."):
-                        dados_veiculo = get_valor_fipe(marca_id, modelo_id, ano_id)
+                if anos:
+                    ano_dict = {a['name']: str(a['code']) for a in anos}
+                    ano_selecionado = st.selectbox("Selecione o Ano de Fabricação", options=["Selecione..."] + list(ano_dict.keys()))
+                    
+                    if ano_selecionado != "Selecione...":
+                        ano_id = ano_dict[ano_selecionado]
                         
-                        if dados_veiculo:
-                            valor = dados_veiculo['Valor']
-                            codigo_fipe_real = dados_veiculo['CodigoFipe']
-                            mes_ref = dados_veiculo['MesReferencia']
-                            
-                            st.success(f"Veículo encontrado! Valor: **{valor}** (Código Fipe Oculto: {codigo_fipe_real} - Ref: {mes_ref})")
-                            
-                            # Salvando no Banco de Dados
-                            conn = sqlite3.connect('markup_motoristas.db')
-                            c = conn.cursor()
-                            c.execute('''INSERT INTO perfil_motorista 
-                                         (user_id, nome, email, cidade, whatsapp, dias_semana, horas_dia, marca, modelo, ano, codigo_fipe, valor_fipe)
-                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-                                      (st.session_state['username'], nome, email, cidade, whatsapp, dias_semana, horas_dia, 
-                                       marca_selecionada, modelo_selecionado, ano_selecionado, codigo_fipe_real, valor))
-                            conn.commit()
-                            conn.close()
-                            st.info("Dados salvos com sucesso na base!")
-                        else:
-                            st.error("Erro ao buscar o valor final na FIPE. Tente novamente.")
+                        st.markdown("---")
+                        if st.button("Salvar e Consultar Preço Real"):
+                            with st.spinner("Buscando valor oficial na base FIPE..."):
+                                dados_veiculo = get_valor_fipe(marca_id, modelo_id, ano_id)
+                                
+                                if dados_veiculo:
+                                    valor = dados_veiculo['price']
+                                    codigo_fipe_real = dados_veiculo['codeFipe']
+                                    mes_ref = dados_veiculo['referenceMonth']
+                                    
+                                    st.success(f"Veículo encontrado! Valor: **{valor}** (Código Fipe Oculto: {codigo_fipe_real} - Ref: {mes_ref})")
+                                    
+                                    # Salvando no BD
+                                    conn = sqlite3.connect('markup_motoristas.db')
+                                    c = conn.cursor()
+                                    c.execute('''INSERT INTO perfil_motorista 
+                                                 (user_id, nome, email, cidade, whatsapp, dias_semana, horas_dia, marca, modelo, ano, codigo_fipe, valor_fipe)
+                                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+                                              (st.session_state['username'], nome, email, cidade, whatsapp, dias_semana, horas_dia, 
+                                               marca_selecionada, modelo_selecionado, ano_selecionado, codigo_fipe_real, valor))
+                                    conn.commit()
+                                    conn.close()
+                                    st.info("Dados salvos com sucesso na base nacional!")
+                                else:
+                                    st.error("Erro ao buscar o valor final na FIPE. Tente novamente.")
 
-# 5. Controle de Fluxo da Aplicação
+# 5. Controle de Fluxo
 init_db()
 
 if 'logged_in' not in st.session_state:
