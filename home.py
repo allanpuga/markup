@@ -94,7 +94,8 @@ def login_page():
                     st.session_state['username'] = username
                     st.rerun()
                 else: st.error("Usuário ou senha incorretos.")
-            except: st.error("Erro de conexão com o banco de dados.")
+            except Exception as e: 
+                st.error(f"Erro de conexão com o banco: {e}") # <-- AGORA MOSTRA O ERRO REAL
 
     with aba_cadastro:
         st.subheader("Novo Cadastro")
@@ -109,7 +110,10 @@ def login_page():
                     conn.commit()
                     conn.close()
                     st.success("Conta criada! Volte na aba 'Entrar' para acessar o sistema.")
-                except: st.error("Este nome de usuário já existe ou ocorreu um erro.")
+                except mysql.connector.IntegrityError: 
+                    st.error("Este nome de usuário já existe ou ocorreu um erro.")
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}") # <-- AGORA MOSTRA O ERRO REAL
             else: st.warning("Preencha todos os campos para se cadastrar.")
 
 # 4. Interface Principal
