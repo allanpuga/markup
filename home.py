@@ -1,6 +1,7 @@
 import streamlit as st
 import mysql.connector
 import requests
+import time # Adicionado para criar a pausa de leitura antes de mudar de tela
 
 # 1. Configuração de Conexão MySQL
 def get_db_connection():
@@ -17,7 +18,6 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS usuarios 
                  (id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE, password VARCHAR(255))''')
     
-    # Tabela com as NOVAS COLUNAS de Posse do Veículo
     c.execute('''CREATE TABLE IF NOT EXISTS perfil_motorista 
                  (id INT AUTO_INCREMENT PRIMARY KEY, user_id VARCHAR(255) UNIQUE, nome VARCHAR(255), email VARCHAR(255), 
                   estado VARCHAR(50), cidade VARCHAR(255), whatsapp VARCHAR(50), 
@@ -119,8 +119,12 @@ def main_app():
     st.sidebar.title("Navegação")
     st.sidebar.write(f"👤 Olá, **{username}**!")
     
-    # NOVO MENU COM 3 OPÇÕES
-    menu_opcao = st.sidebar.radio("Etapas:", ["1️⃣ Meu Perfil", "2️⃣ Veículo e Jornada", "3️⃣ Calculadora de Markup"])
+    # Controle de Aba Automática
+    if 'menu_opcao' not in st.session_state:
+        st.session_state['menu_opcao'] = "1️⃣ Meu Perfil"
+        
+    menu_opcao = st.sidebar.radio("Etapas:", ["1️⃣ Meu Perfil", "2️⃣ Veículo e Jornada", "3️⃣ Calculadora de Markup"], key="menu_opcao")
+    
     st.sidebar.markdown("---")
     if st.sidebar.button("Sair (Logout)"):
         st.session_state['logged_in'] = False
@@ -168,7 +172,8 @@ def main_app():
                 index_cidade = cidades.index(p_cidade) if p_cidade in cidades else 0
                 cidade_selecionada = st.selectbox("Cidade", options=cidades, index=index_cidade)
 
-        if st.button("💾 Salvar Perfil", type="primary"):
+        st.markdown("---")
+        if st.button("💾 Salvar Perfil e Avançar", type="primary"):
             if estado_selecionado == "Selecione..." or cidade_selecionada == "Selecione...":
                 st.warning("Selecione seu Estado e Cidade.")
             else:
@@ -183,7 +188,12 @@ def main_app():
                               (username, nome, email, whatsapp, uf_salvar, cidade_selecionada))
                 conn.commit()
                 conn.close()
-                st.success("✅ Perfil salvo! Acesse 'Veículo e Jornada' no menu lateral.")
+                
+                # Feedback visual e avanço automático
+                st.success("✅ Perfil salvo! Avançando para a próxima etapa...")
+                time.sleep(1) # Aguarda 1 segundo
+                st.session_state['menu_opcao'] = "2️⃣ Veículo e Jornada" # Muda a aba na memória
+                st.rerun() # Recarrega a tela na aba nova
 
 
     # --- TELA 2: VEÍCULO E JORNADA ---
@@ -193,33 +203,26 @@ def main_app():
             st.warning("⚠️ Preencha seu Perfil na etapa 1 antes de continuar!")
             return
 
-        # Variáveis da Jornada
         p_ds = int(perfil['dias_semana']) if perfil and perfil['dias_semana'] else 6
         p_hd = int(perfil['horas_dia']) if perfil and perfil['horas_dia'] else 8
         p_km = float(perfil['km_dia']) if perfil and perfil['km_dia'] else 150.0
-        
-        # Variáveis do Veículo
         p_tipo_posse = perfil['tipo_posse'] if perfil and perfil['tipo_posse'] else "Próprio"
         p_valor_aluguel = float(perfil['valor_aluguel_semana']) if perfil and perfil['valor_aluguel_semana'] else 0.0
         p_valor_parcela = float(perfil['valor_parcela']) if perfil and perfil['valor_parcela'] else 0.0
         p_parcelas_rest = int(perfil['parcelas_restantes']) if perfil and perfil['parcelas_restantes'] else 0
 
-        # MÓDULO 1: JORNADA (Formato Entrevista)
         with st.container(border=True):
             st.markdown("### 🕒 Como é a sua rotina na pista?")
             dias_semana = st.slider("Quantos dias você trabalha por semana?", 1, 7, p_ds)
             horas_dia = st.slider("Em média, quantas horas por dia?", 1, 24, p_hd)
             km_dia = st.number_input("Qual a média de KM rodados por dia?", min_value=10, max_value=800, value=int(p_km))
 
-        # MÓDULO 2: POSSE DO VEÍCULO (Perguntas Condicionais)
         with st.container(border=True):
             st.markdown("### 🔑 Posse do Veículo")
             tipo_posse = st.radio("O veículo que você utiliza é:", ["Próprio", "Alugado", "Financiado"], 
                                   index=["Próprio", "Alugado", "Financiado"].index(p_tipo_posse))
             
-            valor_aluguel = p_valor_aluguel
-            valor_parcela = p_valor_parcela
-            parcelas_restantes = p_parcelas_rest
+            valor_aluguel, valor_parcela, parcelas_restantes = p_valor_aluguel, p_valor_parcela, p_parcelas_rest
 
             if tipo_posse == "Alugado":
                 st.info("💡 Como o carro é alugado, a Calculadora não cobrará IPVA nem Depreciação de você!")
@@ -233,7 +236,6 @@ def main_app():
             else:
                 st.success("✅ Veículo quitado! Todo o lucro sobre a posse é seu.")
 
-        # MÓDULO 3: FIPE
         with st.container(border=True):
             st.markdown("### 🚗 Dados Técnicos (FIPE)")
             p_marca = perfil['marca'] if perfil else ""
@@ -263,7 +265,8 @@ def main_app():
                             ano_selecionado = st.selectbox("Ano", ["Selecione..."] + list(ano_dict.keys()))
                             ano_id = ano_dict[ano_selecionado] if ano_selecionado != "Selecione..." else None
 
-        if st.button("💾 Salvar Jornada e Veículo", type="primary", use_container_width=True):
+        st.markdown("---")
+        if st.button("💾 Salvar Jornada e Avançar para Cálculos", type="primary", use_container_width=True):
             conn = get_db_connection()
             c = conn.cursor()
             
@@ -281,14 +284,23 @@ def main_app():
                                   (dias_semana, horas_dia, km_dia, tipo_posse, valor_aluguel, valor_parcela, parcelas_restantes,
                                    marca_selecionada, modelo_selecionado, ano_selecionado, codigo_fipe_real, fipe_float, fipe_str, username))
                         st.session_state['fipe_float'] = fipe_float
-                        st.success("✅ Tudo salvo! Pode acessar a Calculadora no menu lateral.")
+                        
+                        st.success("✅ Tudo salvo! Abrindo a Calculadora de Markup...")
+                        time.sleep(1)
+                        st.session_state['menu_opcao'] = "3️⃣ Calculadora de Markup"
+                        st.rerun()
             else:
                 c.execute('''UPDATE perfil_motorista SET 
                              dias_semana=%s, horas_dia=%s, km_dia=%s, tipo_posse=%s, valor_aluguel_semana=%s, valor_parcela=%s, parcelas_restantes=%s 
                              WHERE user_id=%s''', 
                           (dias_semana, horas_dia, km_dia, tipo_posse, valor_aluguel, valor_parcela, parcelas_restantes, username))
                 st.session_state['fipe_float'] = p_fipe_val
-                st.success("✅ Jornada e regras de posse atualizadas com sucesso!")
+                
+                st.success("✅ Jornada atualizada! Abrindo a Calculadora de Markup...")
+                time.sleep(1)
+                st.session_state['menu_opcao'] = "3️⃣ Calculadora de Markup"
+                st.rerun()
+                
             conn.commit()
             conn.close()
 
@@ -305,7 +317,6 @@ def main_app():
         with st.expander("📝 Custo Fixo (CF)", expanded=True):
             col_f1, col_f2 = st.columns(2)
             
-            # Automação baseada na posse
             is_alugado = (tipo_posse == "Alugado")
             
             with col_f1:
@@ -315,19 +326,15 @@ def main_app():
                 cf_seguro_carro = st.number_input("CF5 - Seguro do Carro (Anual R$)", value=0.0 if is_alugado else 2500.0)
             
             with col_f2:
-                # Calcula a parcela ou aluguel mensal automaticamente
                 mensalidade_carro = 0.0
-                if tipo_posse == "Alugado":
-                    mensalidade_carro = float(perfil['valor_aluguel_semana']) * 4.33
-                elif tipo_posse == "Financiado":
-                    mensalidade_carro = float(perfil['valor_parcela'])
+                if tipo_posse == "Alugado": mensalidade_carro = float(perfil['valor_aluguel_semana']) * 4.33
+                elif tipo_posse == "Financiado": mensalidade_carro = float(perfil['valor_parcela'])
                     
                 cf_parcela = st.number_input("CF6 - Parcela Fin. / Aluguel (Mensal R$)", value=mensalidade_carro)
                 cf_salario = st.number_input("CF7 - Salário DIEESE (Mensal R$)", value=7200.0)
                 cf_inss = st.number_input("CF8 - INSS (11% Salário Mín Mensal R$)", value=155.32)
                 cf_internet = st.number_input("CF9 - Internet Celular (Mensal R$)", value=60.0)
                 
-            # Depreciação só para carro próprio ou financiado
             cf_depreciacao_mensal = 0.0 if is_alugado else (fipe_atual * 0.24) / 12
             total_cf_mensal = (cf_ipva/12) + (cf_licenciamento/12) + (cf_seguro_obrig/12) + (cf_seguro_carro/12) + cf_parcela + cf_salario + cf_inss + cf_internet + cf_depreciacao_mensal
             
