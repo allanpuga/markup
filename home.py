@@ -1,20 +1,26 @@
 import streamlit as st
-import sqlite3
+import mysql.connector
 import requests
 
-# 1. Banco de Dados (Agora com restrição de Usuário Único)
+# 1. Configuração de Conexão MySQL (Puxando do Cofre/Secrets)
+def get_db_connection():
+    return mysql.connector.connect(
+        host=st.secrets["mysql"]["host"],
+        user=st.secrets["mysql"]["user"],
+        password=st.secrets["mysql"]["password"],
+        database=st.secrets["mysql"]["database"]
+    )
+
 def init_db():
-    conn = sqlite3.connect('markup_motoristas.db')
+    conn = get_db_connection()
     c = conn.cursor()
-    # Adicionado UNIQUE no username para evitar cadastros duplicados
     c.execute('''CREATE TABLE IF NOT EXISTS usuarios 
-                 (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT)''')
+                 (id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE, password VARCHAR(255))''')
     
-    # Adicionado UNIQUE no user_id para podermos atualizar o perfil existente
     c.execute('''CREATE TABLE IF NOT EXISTS perfil_motorista 
-                 (id INTEGER PRIMARY KEY, user_id TEXT UNIQUE, nome TEXT, email TEXT, 
-                  cidade TEXT, whatsapp TEXT, dias_semana INTEGER, horas_dia INTEGER, 
-                  km_dia REAL, marca TEXT, modelo TEXT, ano TEXT, codigo_fipe TEXT, valor_fipe REAL, fipe_str TEXT)''')
+                 (id INT AUTO_INCREMENT PRIMARY KEY, user_id VARCHAR(255) UNIQUE, nome VARCHAR(255), email VARCHAR(255), 
+                  cidade VARCHAR(255), whatsapp VARCHAR(50), dias_semana INT, horas_dia INT, 
+                  km_dia FLOAT, marca VARCHAR(100), modelo VARCHAR(100), ano VARCHAR(50), codigo_fipe VARCHAR(50), valor_fipe FLOAT, fipe_str VARCHAR(50))''')
     conn.commit()
     conn.close()
 
@@ -23,25 +29,21 @@ headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
 @st.cache_data(ttl=3600)
 def get_marcas():
-    try:
-        return requests.get("https://fipe.parallelum.com.br/api/v2/cars/brands", headers=headers).json()
+    try: return requests.get("https://fipe.parallelum.com.br/api/v2/cars/brands", headers=headers).json()
     except: return []
 
 @st.cache_data(ttl=3600)
 def get_modelos(marca_id):
-    try:
-        return requests.get(f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models", headers=headers).json()
+    try: return requests.get(f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models", headers=headers).json()
     except: return []
 
 @st.cache_data(ttl=3600)
 def get_anos(marca_id, modelo_id):
-    try:
-        return requests.get(f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models/{modelo_id}/years", headers=headers).json()
+    try: return requests.get(f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models/{modelo_id}/years", headers=headers).json()
     except: return []
 
 def get_valor_fipe(marca_id, modelo_id, ano_id):
-    try:
-        return requests.get(f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models/{modelo_id}/years/{ano_id}", headers=headers).json()
+    try: return requests.get(f"https://fipe.parallelum.com.br/api/v2/cars/brands/{marca_id}/models/{modelo_id}/years/{ano_id}", headers=headers).json()
     except: return None
 
 @st.cache_data(ttl=86400)
@@ -49,8 +51,7 @@ def get_ipca():
     try:
         res = requests.get("https://api.bcb.gov.br/dados/serie/bcdata.sgs.13522/dados/ultimos/1")
         return float(res.json()[0]['valor'])
-    except:
-        return 4.50
+    except: return 4.50
 
 # 3. Tela de Login e Cadastro
 def login_page():
@@ -59,27 +60,28 @@ def login_page():
     
     aba_login, aba_cadastro = st.tabs(["Entrar", "Criar Conta"])
     
-    # Aba de Login
     with aba_login:
         st.subheader("Faça seu Login")
         username = st.text_input("Usuário", key="log_user")
         password = st.text_input("Senha", type="password", key="log_pass")
         
         if st.button("Entrar", type="primary"):
-            conn = sqlite3.connect('markup_motoristas.db')
-            c = conn.cursor()
-            c.execute("SELECT * FROM usuarios WHERE username=? AND password=?", (username, password))
-            user = c.fetchone()
-            conn.close()
-            
-            if user:
-                st.session_state['logged_in'] = True
-                st.session_state['username'] = username
-                st.rerun()
-            else:
-                st.error("Usuário ou senha incorretos.")
+            try:
+                conn = get_db_connection()
+                c = conn.cursor(dictionary=True)
+                c.execute("SELECT * FROM usuarios WHERE username=%s AND password=%s", (username, password))
+                user = c.fetchone()
+                conn.close()
+                
+                if user:
+                    st.session_state['logged_in'] = True
+                    st.session_state['username'] = username
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha incorretos.")
+            except Exception as e:
+                st.error(f"Erro de conexão com o banco de dados. Configure os Secrets no Streamlit. Detalhe: {e}")
 
-    # Aba de Cadastro
     with aba_cadastro:
         st.subheader("Novo Cadastro")
         new_user = st.text_input("Escolha um Usuário", key="cad_user")
@@ -88,14 +90,16 @@ def login_page():
         if st.button("Cadastrar e Criar Perfil"):
             if new_user and new_pass:
                 try:
-                    conn = sqlite3.connect('markup_motoristas.db')
+                    conn = get_db_connection()
                     c = conn.cursor()
-                    c.execute("INSERT INTO usuarios (username, password) VALUES (?, ?)", (new_user, new_pass))
+                    c.execute("INSERT INTO usuarios (username, password) VALUES (%s, %s)", (new_user, new_pass))
                     conn.commit()
                     conn.close()
                     st.success("Conta criada com sucesso! Volte na aba 'Entrar' para acessar o sistema.")
-                except sqlite3.IntegrityError:
+                except mysql.connector.IntegrityError:
                     st.error("Este nome de usuário já existe. Por favor, escolha outro.")
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
             else:
                 st.warning("Preencha todos os campos para se cadastrar.")
 
@@ -111,29 +115,26 @@ def main_app():
 
     st.title("📊 Seu Perfil e Markup")
 
-    # --- BUSCAR DADOS SALVOS DO USUÁRIO ---
-    conn = sqlite3.connect('markup_motoristas.db')
-    c = conn.cursor()
-    c.execute("SELECT * FROM perfil_motorista WHERE user_id=?", (username,))
+    # BUSCAR DADOS
+    conn = get_db_connection()
+    c = conn.cursor(dictionary=True)
+    c.execute("SELECT * FROM perfil_motorista WHERE user_id=%s", (username,))
     perfil = c.fetchone()
     conn.close()
 
-    # Define os valores padrão baseados no banco de dados (se existirem)
-    # Índices BD: 2=nome, 3=email, 4=cidade, 5=whatsapp, 6=ds, 7=hd, 8=km, 9=marca, 10=modelo, 11=ano, 12=cod_fipe, 13=valor_fipe, 14=fipe_str
-    p_nome = perfil[2] if perfil else ""
-    p_email = perfil[3] if perfil else ""
-    p_cidade = perfil[4] if perfil else ""
-    p_whatsapp = perfil[5] if perfil else ""
-    p_ds = int(perfil[6]) if perfil else 6
-    p_hd = int(perfil[7]) if perfil else 8
-    p_km = float(perfil[8]) if perfil else 150.0
+    p_nome = perfil['nome'] if perfil else ""
+    p_email = perfil['email'] if perfil else ""
+    p_cidade = perfil['cidade'] if perfil else ""
+    p_whatsapp = perfil['whatsapp'] if perfil else ""
+    p_ds = int(perfil['dias_semana']) if perfil else 6
+    p_hd = int(perfil['horas_dia']) if perfil else 8
+    p_km = float(perfil['km_dia']) if perfil else 150.0
     
-    p_marca = perfil[9] if perfil else ""
-    p_modelo = perfil[10] if perfil else ""
-    p_fipe_val = float(perfil[13]) if perfil and perfil[13] else 0.0
-    p_fipe_str = perfil[14] if perfil and len(perfil) > 14 and perfil[14] else ""
+    p_marca = perfil['marca'] if perfil else ""
+    p_modelo = perfil['modelo'] if perfil else ""
+    p_fipe_val = float(perfil['valor_fipe']) if perfil and perfil['valor_fipe'] else 0.0
+    p_fipe_str = perfil['fipe_str'] if perfil and perfil['fipe_str'] else ""
 
-    # --- CAPTAÇÃO DE DADOS ---
     st.subheader("1. Informações Pessoais")
     col_p1, col_p2 = st.columns(2)
     with col_p1:
@@ -153,11 +154,8 @@ def main_app():
         km_dia = st.number_input("KM Médio por dia", min_value=10, max_value=800, value=int(p_km))
 
     st.subheader("3. Dados do Veículo")
-    
-    # Se já tem veículo, mostra um aviso
     if p_fipe_val > 0:
         st.info(f"🚘 **Veículo Atual:** {p_marca} {p_modelo} | **Valor FIPE:** {p_fipe_str}")
-        st.caption("Para manter este veículo, deixe os campos abaixo como 'Selecione...'. Para trocar de carro, faça uma nova busca.")
 
     marcas = get_marcas()
     if not marcas: return
@@ -186,13 +184,12 @@ def main_app():
                     ano_selecionado = st.selectbox("Trocar Ano", ["Selecione..."] + list(ano_dict.keys()))
                     ano_id = ano_dict[ano_selecionado] if ano_selecionado != "Selecione..." else None
 
-    # BOTÃO MESTRE DE SALVAR
+    # BOTÃO SALVAR
     st.markdown("---")
     if st.button("💾 Salvar Perfil e Abrir Calculadora", type="primary"):
-        conn = sqlite3.connect('markup_motoristas.db')
+        conn = get_db_connection()
         c = conn.cursor()
         
-        # Cenário A: Usuário selecionou um carro NOVO
         if marca_selecionada != "Selecione..." and modelo_selecionado != "Selecione..." and ano_selecionado != "Selecione...":
             with st.spinner("Atualizando FIPE e salvando perfil..."):
                 dados_veiculo = get_valor_fipe(marca_id, modelo_id, ano_id)
@@ -201,42 +198,35 @@ def main_app():
                     codigo_fipe_real = dados_veiculo['codeFipe']
                     fipe_float = float(fipe_str.replace('R$', '').replace('.', '').replace(',', '.').strip())
                     
-                    # Salva tudo atualizado
                     if perfil:
                         c.execute('''UPDATE perfil_motorista SET 
-                                     nome=?, email=?, cidade=?, whatsapp=?, dias_semana=?, horas_dia=?, km_dia=?, 
-                                     marca=?, modelo=?, ano=?, codigo_fipe=?, valor_fipe=?, fipe_str=? WHERE user_id=?''',
+                                     nome=%s, email=%s, cidade=%s, whatsapp=%s, dias_semana=%s, horas_dia=%s, km_dia=%s, 
+                                     marca=%s, modelo=%s, ano=%s, codigo_fipe=%s, valor_fipe=%s, fipe_str=%s WHERE user_id=%s''',
                                   (nome, email, cidade, whatsapp, dias_semana, horas_dia, km_dia, 
                                    marca_selecionada, modelo_selecionado, ano_selecionado, codigo_fipe_real, fipe_float, fipe_str, username))
                     else:
                         c.execute('''INSERT INTO perfil_motorista 
                                      (user_id, nome, email, cidade, whatsapp, dias_semana, horas_dia, km_dia, marca, modelo, ano, codigo_fipe, valor_fipe, fipe_str)
-                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+                                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''', 
                                   (username, nome, email, cidade, whatsapp, dias_semana, horas_dia, km_dia,
                                    marca_selecionada, modelo_selecionado, ano_selecionado, codigo_fipe_real, fipe_float, fipe_str))
-                    
                     st.session_state['fipe_float'] = fipe_float
                     st.success("Perfil e Veículo atualizados com sucesso!")
-                else:
-                    st.error("Erro ao buscar FIPE. Tente novamente.")
-        
-        # Cenário B: Usuário NÃO selecionou carro novo, quer usar o que já estava salvo
         else:
-            if p_fipe_val > 0: # Ele tem carro salvo
+            if p_fipe_val > 0:
                 if perfil:
                     c.execute('''UPDATE perfil_motorista SET 
-                                 nome=?, email=?, cidade=?, whatsapp=?, dias_semana=?, horas_dia=?, km_dia=? WHERE user_id=?''',
+                                 nome=%s, email=%s, cidade=%s, whatsapp=%s, dias_semana=%s, horas_dia=%s, km_dia=%s WHERE user_id=%s''',
                               (nome, email, cidade, whatsapp, dias_semana, horas_dia, km_dia, username))
-                
                 st.session_state['fipe_float'] = p_fipe_val
-                st.success("Informações pessoais e jornada atualizadas!")
+                st.success("Informações pessoais atualizadas!")
             else:
-                st.error("Você precisa selecionar um veículo na base FIPE para continuar!")
+                st.error("Selecione um veículo na base FIPE!")
         
         conn.commit()
         conn.close()
 
-    # --- CALCULADORA FINANCEIRA ---
+    # CALCULADORA
     if 'fipe_float' in st.session_state:
         st.markdown("---")
         st.header("⚙️ Custos Operacionais")
@@ -273,11 +263,7 @@ def main_app():
             dias_mensais = dias_semana * 4.33
             km_mensal = km_dia * dias_mensais
             
-            total_cv_mensal = (cv_alim_dia * dias_mensais) + (cv_comb_dia * dias_mensais) + \
-                              cv_manut_mensal + cv_lavagem + \
-                              (cv_oleo / 10000 * km_mensal) + \
-                              (cv_pneu / 30000 * km_mensal) + \
-                              (cv_alinhamento / 10000 * km_mensal)
+            total_cv_mensal = (cv_alim_dia * dias_mensais) + (cv_comb_dia * dias_mensais) + cv_manut_mensal + cv_lavagem + (cv_oleo / 10000 * km_mensal) + (cv_pneu / 30000 * km_mensal) + (cv_alinhamento / 10000 * km_mensal)
 
         with st.expander("📈 Custo Percentual (CP)"):
             ipca_atual = get_ipca()
@@ -310,8 +296,11 @@ def main_app():
             except ZeroDivisionError:
                 st.error("A soma dos percentuais não pode ser 100% ou maior.")
 
-# Controle Fluxo
-init_db()
+try:
+    init_db()
+except Exception as e:
+    pass # Inicializado no Workbench
+
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if not st.session_state['logged_in']: login_page()
 else: main_app()
