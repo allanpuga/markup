@@ -1,7 +1,7 @@
 import streamlit as st
 import mysql.connector
 import requests
-import time # Adicionado para criar a pausa de leitura antes de mudar de tela
+import time
 
 # 1. Configuração de Conexão MySQL
 def get_db_connection():
@@ -119,9 +119,11 @@ def main_app():
     st.sidebar.title("Navegação")
     st.sidebar.write(f"👤 Olá, **{username}**!")
     
-    # Controle de Aba Automática
-    if 'menu_opcao' not in st.session_state:
-        st.session_state['menu_opcao'] = "1️⃣ Meu Perfil"
+    # --- CORREÇÃO: TROCA DE ABA ANTES DE DESENHAR O MENU ---
+    # Lê o "bilhete" de mudança de aba, aplica no menu e deleta o bilhete.
+    if 'mudar_aba' in st.session_state:
+        st.session_state['menu_opcao'] = st.session_state['mudar_aba']
+        del st.session_state['mudar_aba']
         
     menu_opcao = st.sidebar.radio("Etapas:", ["1️⃣ Meu Perfil", "2️⃣ Veículo e Jornada", "3️⃣ Calculadora de Markup"], key="menu_opcao")
     
@@ -189,11 +191,10 @@ def main_app():
                 conn.commit()
                 conn.close()
                 
-                # Feedback visual e avanço automático
                 st.success("✅ Perfil salvo! Avançando para a próxima etapa...")
-                time.sleep(1) # Aguarda 1 segundo
-                st.session_state['menu_opcao'] = "2️⃣ Veículo e Jornada" # Muda a aba na memória
-                st.rerun() # Recarrega a tela na aba nova
+                time.sleep(1.5) # Pausa dramática para leitura
+                st.session_state['mudar_aba'] = "2️⃣ Veículo e Jornada" # Cria o bilhete
+                st.rerun() # Reinicia a página
 
 
     # --- TELA 2: VEÍCULO E JORNADA ---
@@ -286,8 +287,8 @@ def main_app():
                         st.session_state['fipe_float'] = fipe_float
                         
                         st.success("✅ Tudo salvo! Abrindo a Calculadora de Markup...")
-                        time.sleep(1)
-                        st.session_state['menu_opcao'] = "3️⃣ Calculadora de Markup"
+                        time.sleep(1.5)
+                        st.session_state['mudar_aba'] = "3️⃣ Calculadora de Markup"
                         st.rerun()
             else:
                 c.execute('''UPDATE perfil_motorista SET 
@@ -297,8 +298,8 @@ def main_app():
                 st.session_state['fipe_float'] = p_fipe_val
                 
                 st.success("✅ Jornada atualizada! Abrindo a Calculadora de Markup...")
-                time.sleep(1)
-                st.session_state['menu_opcao'] = "3️⃣ Calculadora de Markup"
+                time.sleep(1.5)
+                st.session_state['mudar_aba'] = "3️⃣ Calculadora de Markup"
                 st.rerun()
                 
             conn.commit()
