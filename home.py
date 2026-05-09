@@ -127,7 +127,8 @@ def main_app():
         st.session_state['menu_opcao'] = st.session_state['mudar_aba']
         del st.session_state['mudar_aba']
         
-    menu_opcao = st.sidebar.radio("Etapas:", ["1️⃣ Meu Perfil", "2️⃣ Veículo e Jornada", "3️⃣ Calculadora de Markup"], key="menu_opcao")
+    # --- NOVO MENU COM 4 ETAPAS ---
+    menu_opcao = st.sidebar.radio("Etapas:", ["1️⃣ Meu Perfil", "2️⃣ Veículo e Jornada", "3️⃣ Calculadora de Markup", "4️⃣ Painel de Metas"], key="menu_opcao")
     
     st.sidebar.markdown("---")
     if st.sidebar.button("Sair (Logout)"):
@@ -301,27 +302,17 @@ def main_app():
 
     # --- TELA 3: CALCULADORA DE MARKUP ---
     elif menu_opcao == "3️⃣ Calculadora de Markup":
-        st.title("📊 Painel Financeiro Mestre")
+        st.title("⚙️ Lançamento de Custos (Markup)")
         if not perfil or not perfil['marca']:
             st.warning("⚠️ Preencha as etapas 1 e 2 antes de abrir a Calculadora!")
             return
             
         fipe_atual = float(perfil['valor_fipe'])
         tipo_posse = perfil['tipo_posse']
-        horas_dia_trabalho = int(perfil['horas_dia'])
-        dias_semana_trabalho = int(perfil['dias_semana'])
+        dias_mensais = int(perfil['dias_semana']) * 4.33
         km_dia = float(perfil['km_dia'])
-        
-        dias_mensais = dias_semana_trabalho * 4.33
-        km_mensal = km_dia * dias_mensais
-        horas_trabalhadas_semana = horas_dia_trabalho * dias_semana_trabalho
-        horas_trabalhadas_mes = horas_dia_trabalho * dias_mensais
 
-        # ---------------------------------------------------------
-        # BLOCO 1: CUSTOS FIXOS (Anuais e Mensais)
-        # ---------------------------------------------------------
         with st.expander("📝 Custo Fixo (Rateio Anual e Mensal)", expanded=True):
-            st.markdown("#### 📅 Despesas Anuais do Veículo")
             is_alugado = (tipo_posse == "Alugado")
             is_financiado = (tipo_posse == "Financiado")
             
@@ -331,16 +322,12 @@ def main_app():
                 cf_licenciamento = st.number_input("Licenciamento (Total Anual R$)", value=0.0 if is_alugado else 160.0, disabled=is_alugado)
             with col_a2:
                 cf_seguro_obrig = st.number_input("Seguro Obrigatório/DPVAT (Anual R$)", value=0.0 if is_alugado else 50.0, disabled=is_alugado)
-                
-                if is_alugado:
-                    st.info("🚗 **Carro Alugado:** Isento de Seguro Próprio.")
-                    cf_seguro_carro = 0.0
+                if is_alugado: cf_seguro_carro = 0.0
                 else:
                     tem_seguro = st.radio("Paga Seguro Privado / Proteção Veicular?", ["Sim", "Não"])
                     cf_seguro_carro = st.number_input("Valor do Seguro (Total Anual R$)", value=2500.0) if tem_seguro == "Sim" else 0.0
                 
             cf_anuais_mensalizado = (cf_ipva + cf_licenciamento + cf_seguro_obrig + cf_seguro_carro) / 12
-            if not is_alugado: st.info(f"🔄 **Rateio Mensal dos custos anuais:** R$ {cf_anuais_mensalizado:.2f} / mês")
 
             st.markdown("#### 🗓️ Despesas Mensais Fixas")
             col_f1, col_f2 = st.columns(2)
@@ -351,54 +338,30 @@ def main_app():
             with col_f2:
                 mensalidade_carro = 0.0
                 cf_aluguel_extra = 0.0
-                
                 if is_alugado:
                     mensalidade_carro = float(perfil['valor_aluguel_semana']) * 4.33
-                    st.write(f"**Aluguel Mensal Base:** R$ {mensalidade_carro:.2f}")
-                    cf_aluguel_extra = st.number_input("Custos Extras Locadora (Mensal R$)", value=0.0, help="Caução, etc.")
+                    cf_aluguel_extra = st.number_input("Custos Extras Locadora (Mensal R$)", value=0.0)
                 elif is_financiado:
-                    mensalidade_carro = float(perfil['valor_parcela'])
-                    parcelas_rest = int(perfil['parcelas_restantes'])
-                    cf_parcela = st.number_input("Parcela do Financiamento (Mensal R$)", value=mensalidade_carro)
-                    st.caption(f"Faltam **{parcelas_rest} parcelas**.")
-                    mensalidade_carro = cf_parcela 
-                else:
-                    st.success("✅ Carro quitado! Nenhuma mensalidade devida.")
+                    mensalidade_carro = st.number_input("Parcela do Financiamento (Mensal R$)", value=float(perfil['valor_parcela']))
                 
             cf_depreciacao_mensal = 0.0 if is_alugado else (fipe_atual * 0.24) / 12
-            if not is_alugado: st.info(f"📉 **Depreciação Automática:** R$ {cf_depreciacao_mensal:.2f} / mês")
-            
             total_cf_mensal = cf_anuais_mensalizado + cf_inss + cf_internet + mensalidade_carro + cf_aluguel_extra + cf_depreciacao_mensal
 
-        # ---------------------------------------------------------
-        # BLOCO 2: CUSTOS VARIÁVEIS 
-        # ---------------------------------------------------------
         with st.expander("⛽ Custo Variável (Rotina e Operação)", expanded=True):
-            st.markdown("#### 🍽️ Alimentação e Rotina")
             col_r1, col_r2 = st.columns(2)
-            with col_r1:
-                cv_alim_dia = st.number_input("Gasto com Alimentação (Por Dia R$)", value=30.0)
-                st.caption(f"Gasto Mensal: R$ {cv_alim_dia * dias_mensais:.2f}")
-            with col_r2:
-                cv_lavagem = st.number_input("Lavagem do Carro (Mensal R$)", value=120.0)
+            with col_r1: cv_alim_dia = st.number_input("Gasto com Alimentação (Por Dia R$)", value=30.0)
+            with col_r2: cv_lavagem = st.number_input("Lavagem do Carro (Mensal R$)", value=120.0)
 
-            st.markdown("#### ⛽ Inteligência de Combustível")
             col_c1, col_c2, col_c3 = st.columns(3)
-            with col_c1:
-                tipo_comb = st.selectbox("Combustível", ["Gasolina", "Etanol", "GNV (m³)", "Elétrico (kWh)"])
-            with col_c2:
-                preco_comb = st.number_input("Preço na Bomba (R$)", value=5.80)
+            with col_c1: tipo_comb = st.selectbox("Combustível", ["Gasolina", "Etanol", "GNV (m³)", "Elétrico (kWh)"])
+            with col_c2: preco_comb = st.number_input("Preço na Bomba (R$)", value=5.80)
             with col_c3:
                 medida = "m³" if tipo_comb == "GNV (m³)" else "kWh" if tipo_comb == "Elétrico (kWh)" else "Litro"
                 consumo_comb = st.number_input(f"Faz quantos KM por {medida}?", value=10.0)
             
             cv_comb_dia = (km_dia / consumo_comb) * preco_comb if consumo_comb > 0 else 0
             cv_comb_mensal = cv_comb_dia * dias_mensais
-            st.success(f"🚦 Combustível: **R$ {cv_comb_dia:.2f} por dia** (Total: R$ {cv_comb_mensal:.2f}/mês).")
 
-            st.markdown("#### 🔧 Manutenção Mecânica")
-            if is_alugado: st.info("💡 Carros alugados têm manutenção inclusa pela locadora.")
-            
             col_m1, col_m2, col_m3 = st.columns(3)
             with col_m1: cv_manut_mensal = st.number_input("Manutenção Média (Mensal R$)", value=0.0 if is_alugado else 150.0)
             with col_m2:
@@ -406,75 +369,106 @@ def main_app():
                 cv_alinhamento = st.number_input("Alinhamento (Por 10k KM)", value=0.0 if is_alugado else 100.0)
             with col_m3: cv_pneu = st.number_input("Jogo de Pneus (Por 30k KM)", value=0.0 if is_alugado else 1600.0)
 
+            km_mensal = km_dia * dias_mensais
             total_cv_mensal = (cv_alim_dia * dias_mensais) + cv_comb_mensal + cv_lavagem + cv_manut_mensal + \
                               (cv_oleo / 10000 * km_mensal) + (cv_alinhamento / 10000 * km_mensal) + (cv_pneu / 30000 * km_mensal)
 
-        # ---------------------------------------------------------
-        # BLOCO 3: IMPOSTOS E MARGEM (PRÓ-LABORE)
-        # ---------------------------------------------------------
-        with st.expander("📈 Impostos e Margem (Pró-labore)"):
-            ipca_atual = get_ipca()
-            st.write(f"**Inflação IPCA (Automático BCB):** {ipca_atual}%")
+        with st.expander("📈 Impostos e Margem (Pró-labore)", expanded=True):
             col_p1, col_p2 = st.columns(2)
             with col_p1:
                 cp_iss = st.number_input("Imposto Municipal / Federal (%)", value=5.0)
-                margem_iss = st.number_input("Sua Margem de Lucro / Pró-labore (%)", value=30.0, help="Esta margem será o seu salário (dinheiro limpo) no fim do mês.")
+                margem_iss = st.number_input("Sua Margem de Lucro / Pró-labore (%)", value=30.0, help="Será o seu salário livre.")
             with col_p2:
                 cp_icms = st.number_input("ICMS / Outras Taxas (%)", value=0.0)
 
-        if st.button("Gerar Relatório de Faturamento Ideal", type="primary", use_container_width=True):
-            st.markdown("### 🏆 Sua Meta Financeira")
-            cp_irpf = ((total_cf_mensal + total_cv_mensal) * 0.60) * 0.11
-            
-            custo_base_total = total_cf_mensal + total_cv_mensal + cp_irpf
-            
-            try:
-                faturamento_meta_iss = custo_base_total / (1 - (cp_iss/100) - (cp_icms/100) - (margem_iss/100))
-                prolabore_real = faturamento_meta_iss * (margem_iss / 100)
-                
-                col_r1, col_r2, col_r3 = st.columns(3)
-                col_r1.metric("Custo Fixo Total", f"R$ {total_cf_mensal:.2f} /mês")
-                col_r2.metric("Custo Variável Total", f"R$ {total_cv_mensal:.2f} /mês")
-                col_r3.metric("Faturamento Necessário", f"R$ {faturamento_meta_iss:.2f} /mês")
-                
-                st.markdown("---")
-                st.markdown("### 💼 Inteligência de Pró-labore (O seu dinheiro)")
-                st.info(f"Ao faturar a meta acima, após pagar todos os custos e impostos da operação, sobrarão **R$ {prolabore_real:.2f} livres** para você ({margem_iss}%).")
-                
-                # ---------------------------------------------------------
-                # NOVO: CARD DE RESUMO OPERACIONAL NA PISTA
-                # ---------------------------------------------------------
-                st.markdown("---")
-                st.markdown("### 🎯 Resumo Operacional na Pista")
-                
-                custo_km = custo_base_total / km_mensal if km_mensal > 0 else 0
-                custo_hora = custo_base_total / horas_trabalhadas_mes if horas_trabalhadas_mes > 0 else 0
-                meta_km = faturamento_meta_iss / km_mensal if km_mensal > 0 else 0
-                meta_hora = faturamento_meta_iss / horas_trabalhadas_mes if horas_trabalhadas_mes > 0 else 0
+        st.markdown("---")
+        if st.button("🚀 Gerar Painel de Metas e Resultados", type="primary", use_container_width=True):
+            # Salva tudo na memória para a próxima aba
+            st.session_state['calc_data'] = {
+                'total_cf_mensal': total_cf_mensal,
+                'total_cv_mensal': total_cv_mensal,
+                'cp_iss': cp_iss,
+                'cp_icms': cp_icms,
+                'margem_iss': margem_iss
+            }
+            st.success("✅ Custos processados! Construindo o seu Painel de Metas...")
+            time.sleep(1.5)
+            st.session_state['mudar_aba'] = "4️⃣ Painel de Metas"
+            st.rerun()
 
-                with st.container(border=True):
-                    # Lembrete da Jornada Planejada
-                    st.markdown("#### 📋 Sua Jornada Planejada")
-                    st.write(f"⏱️ **Tempo de Trabalho:** {horas_dia_trabalho}h/dia | {horas_trabalhadas_semana}h/semana | {horas_trabalhadas_mes:.0f}h/mês")
-                    st.write(f"🛣️ **Distância Mínima:** {km_dia:.0f} km/dia | {km_mensal:.0f} km/mês")
-                    
-                    st.markdown("---")
-                    
-                    # Metricas de Pista
-                    col_res1, col_res2 = st.columns(2)
-                    with col_res1:
-                        st.markdown("**🔴 Seus Custos de Operação**")
-                        st.write(f"Custo por KM Rodado: **R$ {custo_km:.2f}**")
-                        st.write(f"Custo por Hora Trabalhada: **R$ {custo_hora:.2f}**")
-                    with col_res2:
-                        st.markdown("**🟢 Suas Metas de Faturamento**")
-                        st.write(f"Meta de ganho por KM **(mínimo)**: **R$ {meta_km:.2f}**")
-                        st.write(f"Meta de ganho por Hora **(mínimo)**: **R$ {meta_hora:.2f}**")
-                        
-                    st.success(f"💡 **Regra de Ouro:** Para atingir o seu Pró-labore de R$ {prolabore_real:.2f}, cumpra rigorosamente sua jornada estipulada acima e **NÃO ACEITE** corridas que paguem menos de **R$ {meta_km:.2f} por KM** ou que rendam menos de **R$ {meta_hora:.2f} por Hora** (fazer menos é trabalhar no prejuízo)!")
-                    
-            except ZeroDivisionError:
-                st.error("Erro matemático: A soma dos percentuais de imposto e margem não pode ser 100% ou maior.")
+    # --- TELA 4: PAINEL DE METAS (O GRANDE DESTAQUE) ---
+    elif menu_opcao == "4️⃣ Painel de Metas":
+        if 'calc_data' not in st.session_state or not perfil:
+            st.error("⚠️ Atenção: Você precisa preencher a aba '3️⃣ Calculadora de Markup' e clicar em 'Gerar Painel' primeiro.")
+            return
+
+        # Puxando dados calculados e perfil
+        dados = st.session_state['calc_data']
+        horas_dia_trabalho = int(perfil['horas_dia'])
+        dias_semana_trabalho = int(perfil['dias_semana'])
+        km_dia = float(perfil['km_dia'])
+        
+        dias_mensais = dias_semana_trabalho * 4.33
+        km_mensal = km_dia * dias_mensais
+        horas_trabalhadas_semana = horas_dia_trabalho * dias_semana_trabalho
+        horas_trabalhadas_mes = horas_dia_trabalho * dias_mensais
+
+        # Cálculos Finais
+        cp_irpf = ((dados['total_cf_mensal'] + dados['total_cv_mensal']) * 0.60) * 0.11
+        custo_base_total = dados['total_cf_mensal'] + dados['total_cv_mensal'] + cp_irpf
+        
+        try:
+            faturamento_meta_iss = custo_base_total / (1 - (dados['cp_iss']/100) - (dados['cp_icms']/100) - (dados['margem_iss']/100))
+            prolabore_real = faturamento_meta_iss * (dados['margem_iss'] / 100)
+            
+            custo_km = custo_base_total / km_mensal if km_mensal > 0 else 0
+            custo_hora = custo_base_total / horas_trabalhadas_mes if horas_trabalhadas_mes > 0 else 0
+            meta_km = faturamento_meta_iss / km_mensal if km_mensal > 0 else 0
+            meta_hora = faturamento_meta_iss / horas_trabalhadas_mes if horas_trabalhadas_mes > 0 else 0
+
+            # --- RENDERIZAÇÃO DO PAINEL GIGANTE ---
+            st.markdown("<h1 style='text-align: center;'>🎯 O SEU RESUMO NA PISTA</h1>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; color: gray;'>Este é o raio-x da sua operação. Fixe estes números na cabeça.</p>", unsafe_allow_html=True)
+            st.markdown("---")
+
+            # Bloco 1: A Jornada Contratada
+            st.markdown("### 📋 Lembrete da Sua Jornada Planejada")
+            st.info(f"⏱️ **Tempo:** {horas_dia_trabalho}h/dia | {horas_trabalhadas_semana}h/semana | {horas_trabalhadas_mes:.0f}h/mês \n\n 🛣️ **Distância:** {km_dia:.0f} km/dia | {km_mensal:.0f} km/mês")
+
+            # Bloco 2: Cards Visuais
+            st.markdown("### 🚦 Custos vs. Metas (Foque no Verde)")
+            
+            # HTML customizado para os Cards
+            st.markdown(f"""
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                <div style="flex: 1; background-color: #ffeaea; padding: 20px; border-radius: 10px; border: 2px solid #ff4b4b;">
+                    <h3 style="color: #d32f2f; margin-top: 0;">🔴 Custos de Operação</h3>
+                    <p style="color: #d32f2f; font-size: 14px;">Isso é o quanto o seu carro gasta para rodar. Se ganhar isso, você empata.</p>
+                    <h2 style="color: #d32f2f; margin-bottom: 5px;">R$ {custo_km:.2f} <span style="font-size: 16px;">/ KM</span></h2>
+                    <h2 style="color: #d32f2f; margin-top: 0;">R$ {custo_hora:.2f} <span style="font-size: 16px;">/ Hora</span></h2>
+                </div>
+                
+                <div style="flex: 1; background-color: #eafbee; padding: 20px; border-radius: 10px; border: 2px solid #28a745;">
+                    <h3 style="color: #1e7e34; margin-top: 0;">🟢 Metas de Ganho (Mínimo)</h3>
+                    <p style="color: #1e7e34; font-size: 14px;">Isso é o mínimo que você deve aceitar para atingir seu Pró-labore estipulado.</p>
+                    <h2 style="color: #1e7e34; margin-bottom: 5px;">R$ {meta_km:.2f} <span style="font-size: 16px;">/ KM</span></h2>
+                    <h2 style="color: #1e7e34; margin-top: 0;">R$ {meta_hora:.2f} <span style="font-size: 16px;">/ Hora</span></h2>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.error(f"🚨 **REGRA DE OURO:** Para colocar os seus **R$ {prolabore_real:.2f} limpos no bolso**, cumpra as horas acima e **NUNCA ACEITE** corridas que paguem menos de **R$ {meta_km:.2f} por KM** ou rendam menos de **R$ {meta_hora:.2f} por Hora**. Fazer menos do que isso é pagar para trabalhar!")
+
+            st.markdown("---")
+            st.markdown("### 📊 O Resumo do Seu Mês (Caixa do Carro)")
+            col_r1, col_r2, col_r3 = st.columns(3)
+            col_r1.metric("1. Custos da Operação", f"R$ {custo_base_total:.2f}", "Fixo + Variável + IRPF", delta_color="inverse")
+            col_r2.metric("2. Meta de Faturamento Bruto", f"R$ {faturamento_meta_iss:.2f}", "O que o App tem que pagar")
+            col_r3.metric("3. Seu Pró-labore (Lucro)", f"R$ {prolabore_real:.2f}", f"Margem de {dados['margem_iss']}%")
+
+        except ZeroDivisionError:
+            st.error("Erro matemático: A soma dos percentuais de imposto e margem não pode ser 100% ou maior.")
 
 try: init_db()
 except: pass
