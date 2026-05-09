@@ -465,15 +465,16 @@ def main_app():
 
             st.markdown("### 🚦 Custos vs. Metas (Foque no Verde)")
             
+            # ADICIONADO min-width: 280px para criar a quebra automática em celulares
             html_cards = f"""
 <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-<div style="flex: 1; background-color: #ffeaea; padding: 20px; border-radius: 10px; border: 2px solid #ff4b4b;">
+<div style="flex: 1; min-width: 280px; background-color: #ffeaea; padding: 20px; border-radius: 10px; border: 2px solid #ff4b4b;">
 <h3 style="color: #d32f2f; margin-top: 0;">🔴 Custos de Operação</h3>
 <p style="color: #d32f2f; font-size: 14px;">Isso é o quanto o seu carro gasta para rodar. Se ganhar isso, você empata.</p>
 <h2 style="color: #d32f2f; margin-bottom: 5px;">R$ {custo_km:.2f} <span style="font-size: 16px;">/ KM</span></h2>
 <h2 style="color: #d32f2f; margin-top: 0;">R$ {custo_hora:.2f} <span style="font-size: 16px;">/ Hora</span></h2>
 </div>
-<div style="flex: 1; background-color: #eafbee; padding: 20px; border-radius: 10px; border: 2px solid #28a745;">
+<div style="flex: 1; min-width: 280px; background-color: #eafbee; padding: 20px; border-radius: 10px; border: 2px solid #28a745;">
 <h3 style="color: #1e7e34; margin-top: 0;">🟢 Metas de Ganho (Mínimo)</h3>
 <p style="color: #1e7e34; font-size: 14px;">Isso é o mínimo que deve aceitar para atingir seu Pró-labore estipulado.</p>
 <h2 style="color: #1e7e34; margin-bottom: 5px;">R$ {meta_km:.2f} <span style="font-size: 16px;">/ KM</span></h2>
