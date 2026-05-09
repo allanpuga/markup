@@ -127,7 +127,6 @@ def main_app():
         st.session_state['menu_opcao'] = st.session_state['mudar_aba']
         del st.session_state['mudar_aba']
         
-    # --- NOVO MENU COM 4 ETAPAS ---
     menu_opcao = st.sidebar.radio("Etapas:", ["1️⃣ Meu Perfil", "2️⃣ Veículo e Jornada", "3️⃣ Calculadora de Markup", "4️⃣ Painel de Metas"], key="menu_opcao")
     
     st.sidebar.markdown("---")
@@ -383,7 +382,6 @@ def main_app():
 
         st.markdown("---")
         if st.button("🚀 Gerar Painel de Metas e Resultados", type="primary", use_container_width=True):
-            # Salva tudo na memória para a próxima aba
             st.session_state['calc_data'] = {
                 'total_cf_mensal': total_cf_mensal,
                 'total_cv_mensal': total_cv_mensal,
@@ -402,7 +400,6 @@ def main_app():
             st.error("⚠️ Atenção: Você precisa preencher a aba '3️⃣ Calculadora de Markup' e clicar em 'Gerar Painel' primeiro.")
             return
 
-        # Puxando dados calculados e perfil
         dados = st.session_state['calc_data']
         horas_dia_trabalho = int(perfil['horas_dia'])
         dias_semana_trabalho = int(perfil['dias_semana'])
@@ -413,7 +410,6 @@ def main_app():
         horas_trabalhadas_semana = horas_dia_trabalho * dias_semana_trabalho
         horas_trabalhadas_mes = horas_dia_trabalho * dias_mensais
 
-        # Cálculos Finais
         cp_irpf = ((dados['total_cf_mensal'] + dados['total_cv_mensal']) * 0.60) * 0.11
         custo_base_total = dados['total_cf_mensal'] + dados['total_cv_mensal'] + cp_irpf
         
@@ -426,36 +422,34 @@ def main_app():
             meta_km = faturamento_meta_iss / km_mensal if km_mensal > 0 else 0
             meta_hora = faturamento_meta_iss / horas_trabalhadas_mes if horas_trabalhadas_mes > 0 else 0
 
-            # --- RENDERIZAÇÃO DO PAINEL GIGANTE ---
+            # --- RENDERIZAÇÃO DO PAINEL GIGANTE SEM ESPAÇOS ---
             st.markdown("<h1 style='text-align: center;'>🎯 O SEU RESUMO NA PISTA</h1>", unsafe_allow_html=True)
             st.markdown("<p style='text-align: center; color: gray;'>Este é o raio-x da sua operação. Fixe estes números na cabeça.</p>", unsafe_allow_html=True)
             st.markdown("---")
 
-            # Bloco 1: A Jornada Contratada
             st.markdown("### 📋 Lembrete da Sua Jornada Planejada")
             st.info(f"⏱️ **Tempo:** {horas_dia_trabalho}h/dia | {horas_trabalhadas_semana}h/semana | {horas_trabalhadas_mes:.0f}h/mês \n\n 🛣️ **Distância:** {km_dia:.0f} km/dia | {km_mensal:.0f} km/mês")
 
-            # Bloco 2: Cards Visuais
             st.markdown("### 🚦 Custos vs. Metas (Foque no Verde)")
             
-            # HTML customizado para os Cards
-            st.markdown(f"""
-            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                <div style="flex: 1; background-color: #ffeaea; padding: 20px; border-radius: 10px; border: 2px solid #ff4b4b;">
-                    <h3 style="color: #d32f2f; margin-top: 0;">🔴 Custos de Operação</h3>
-                    <p style="color: #d32f2f; font-size: 14px;">Isso é o quanto o seu carro gasta para rodar. Se ganhar isso, você empata.</p>
-                    <h2 style="color: #d32f2f; margin-bottom: 5px;">R$ {custo_km:.2f} <span style="font-size: 16px;">/ KM</span></h2>
-                    <h2 style="color: #d32f2f; margin-top: 0;">R$ {custo_hora:.2f} <span style="font-size: 16px;">/ Hora</span></h2>
-                </div>
-                
-                <div style="flex: 1; background-color: #eafbee; padding: 20px; border-radius: 10px; border: 2px solid #28a745;">
-                    <h3 style="color: #1e7e34; margin-top: 0;">🟢 Metas de Ganho (Mínimo)</h3>
-                    <p style="color: #1e7e34; font-size: 14px;">Isso é o mínimo que você deve aceitar para atingir seu Pró-labore estipulado.</p>
-                    <h2 style="color: #1e7e34; margin-bottom: 5px;">R$ {meta_km:.2f} <span style="font-size: 16px;">/ KM</span></h2>
-                    <h2 style="color: #1e7e34; margin-top: 0;">R$ {meta_hora:.2f} <span style="font-size: 16px;">/ Hora</span></h2>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            # HTML formatado SEM recuos (espaços no início da linha) para o Streamlit não confundir com bloco de código
+            html_cards = f"""
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+<div style="flex: 1; background-color: #ffeaea; padding: 20px; border-radius: 10px; border: 2px solid #ff4b4b;">
+<h3 style="color: #d32f2f; margin-top: 0;">🔴 Custos de Operação</h3>
+<p style="color: #d32f2f; font-size: 14px;">Isso é o quanto o seu carro gasta para rodar. Se ganhar isso, você empata.</p>
+<h2 style="color: #d32f2f; margin-bottom: 5px;">R$ {custo_km:.2f} <span style="font-size: 16px;">/ KM</span></h2>
+<h2 style="color: #d32f2f; margin-top: 0;">R$ {custo_hora:.2f} <span style="font-size: 16px;">/ Hora</span></h2>
+</div>
+<div style="flex: 1; background-color: #eafbee; padding: 20px; border-radius: 10px; border: 2px solid #28a745;">
+<h3 style="color: #1e7e34; margin-top: 0;">🟢 Metas de Ganho (Mínimo)</h3>
+<p style="color: #1e7e34; font-size: 14px;">Isso é o mínimo que deve aceitar para atingir seu Pró-labore estipulado.</p>
+<h2 style="color: #1e7e34; margin-bottom: 5px;">R$ {meta_km:.2f} <span style="font-size: 16px;">/ KM</span></h2>
+<h2 style="color: #1e7e34; margin-top: 0;">R$ {meta_hora:.2f} <span style="font-size: 16px;">/ Hora</span></h2>
+</div>
+</div>
+"""
+            st.markdown(html_cards, unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
             st.error(f"🚨 **REGRA DE OURO:** Para colocar os seus **R$ {prolabore_real:.2f} limpos no bolso**, cumpra as horas acima e **NUNCA ACEITE** corridas que paguem menos de **R$ {meta_km:.2f} por KM** ou rendam menos de **R$ {meta_hora:.2f} por Hora**. Fazer menos do que isso é pagar para trabalhar!")
