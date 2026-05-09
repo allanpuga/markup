@@ -488,10 +488,21 @@ def main_app():
 
             st.markdown("---")
             st.markdown("### 📊 O Resumo do Seu Mês (Caixa do Carro)")
+            
+            st.info(f'''
+            **💡 Entenda a matemática do seu aplicativo:**
+            Baseado nas informações que você prestou, o seu **Custo de Operação é de R$ {custo_base_total:.2f}** por mês (Custos Fixos + Custos Variáveis + Impostos). 
+            Ou seja, para pagar todas as suas contas, manter o carro rodando e "não tirar dinheiro do próprio bolso", você precisa faturar exatamente esse valor para empatar.
+            
+            Para que, além de pagar as contas, você consiga retirar o seu **Pró-labore (Lucro) de R$ {prolabore_real:.2f}** (a sua margem de {dados['margem_iss']}% limpa no bolso), a sua **Meta de Faturamento Bruto** no aplicativo deve ser de **R$ {faturamento_meta_iss:.2f}** durante o mês.
+            ''')
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+
             col_r1, col_r2, col_r3 = st.columns(3)
-            col_r1.metric("1. Custos da Operação", f"R$ {custo_base_total:.2f}", "Fixo + Variável + IRPF", delta_color="inverse")
-            col_r2.metric("2. Meta de Faturamento Bruto", f"R$ {faturamento_meta_iss:.2f}", "O que o App tem que pagar")
-            col_r3.metric("3. Seu Pró-labore (Lucro)", f"R$ {prolabore_real:.2f}", f"Margem de {dados['margem_iss']}%")
+            col_r1.metric("1. Custo de Operação", f"R$ {custo_base_total:.2f}", "Para pagar as contas", delta_color="inverse")
+            col_r2.metric("2. Meta Faturamento Bruto", f"R$ {faturamento_meta_iss:.2f}", "O que fazer no App")
+            col_r3.metric("3. Pró-labore (Seu Lucro)", f"R$ {prolabore_real:.2f}", f"Margem de {dados['margem_iss']}%")
 
         except ZeroDivisionError:
             st.error("Erro matemático: A soma dos percentuais de imposto e margem não pode ser 100% ou maior.")
