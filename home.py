@@ -343,7 +343,6 @@ def main_app():
             st.markdown("#### 🗓️ Despesas Mensais Fixas")
             col_f1, col_f2 = st.columns(2)
             with col_f1:
-                # Removido o campo de Salário Fixo. INSS/MEI mantido.
                 cf_inss = st.number_input("Contribuição INSS / MEI (Mensal R$)", value=155.32)
                 cf_internet = st.number_input("Plano de Internet Celular (Mensal R$)", value=60.0)
             
@@ -453,6 +452,30 @@ def main_app():
                     st.warning("⚠️ Atenção: Sua carga horária está superior ao limite saudável estipulado pela CLT (44h semanais).")
                 else:
                     st.success("✅ Sua carga horária está dentro do padrão saudável da CLT.")
+
+                # ---------------------------------------------------------
+                # NOVO: CARD DE RESUMO OPERACIONAL NA PISTA
+                # ---------------------------------------------------------
+                st.markdown("---")
+                st.markdown("### 🎯 Resumo Operacional na Pista")
+                
+                custo_km = custo_base_total / km_mensal if km_mensal > 0 else 0
+                custo_hora = custo_base_total / horas_trabalhadas_mes if horas_trabalhadas_mes > 0 else 0
+                meta_km = faturamento_meta_iss / km_mensal if km_mensal > 0 else 0
+                meta_hora = faturamento_meta_iss / horas_trabalhadas_mes if horas_trabalhadas_mes > 0 else 0
+
+                with st.container(border=True):
+                    col_res1, col_res2 = st.columns(2)
+                    with col_res1:
+                        st.markdown("**🔴 Seus Custos de Operação**")
+                        st.write(f"Custo por KM Rodado: **R$ {custo_km:.2f}**")
+                        st.write(f"Custo por Hora Trabalhada: **R$ {custo_hora:.2f}**")
+                    with col_res2:
+                        st.markdown("**🟢 Suas Metas de Faturamento**")
+                        st.write(f"Meta de ganho por KM: **R$ {meta_km:.2f}**")
+                        st.write(f"Meta de ganho por Hora: **R$ {meta_hora:.2f}**")
+                        
+                    st.success(f"💡 **Regra de Ouro:** Para atingir o seu Pró-labore de R$ {prolabore_real:.2f}, não aceite corridas que paguem menos de **R$ {meta_km:.2f} por KM** ou que rendam menos de **R$ {meta_hora:.2f} por Hora**!")
                     
             except ZeroDivisionError:
                 st.error("Erro matemático: A soma dos percentuais de imposto e margem não pode ser 100% ou maior.")
