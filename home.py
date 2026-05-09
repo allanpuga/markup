@@ -310,9 +310,11 @@ def main_app():
         tipo_posse = perfil['tipo_posse']
         horas_dia_trabalho = int(perfil['horas_dia'])
         dias_semana_trabalho = int(perfil['dias_semana'])
+        km_dia = float(perfil['km_dia'])
         
         dias_mensais = dias_semana_trabalho * 4.33
-        km_mensal = float(perfil['km_dia']) * dias_mensais
+        km_mensal = km_dia * dias_mensais
+        horas_trabalhadas_semana = horas_dia_trabalho * dias_semana_trabalho
         horas_trabalhadas_mes = horas_dia_trabalho * dias_mensais
 
         # ---------------------------------------------------------
@@ -390,7 +392,7 @@ def main_app():
                 medida = "m³" if tipo_comb == "GNV (m³)" else "kWh" if tipo_comb == "Elétrico (kWh)" else "Litro"
                 consumo_comb = st.number_input(f"Faz quantos KM por {medida}?", value=10.0)
             
-            cv_comb_dia = (float(perfil['km_dia']) / consumo_comb) * preco_comb if consumo_comb > 0 else 0
+            cv_comb_dia = (km_dia / consumo_comb) * preco_comb if consumo_comb > 0 else 0
             cv_comb_mensal = cv_comb_dia * dias_mensais
             st.success(f"🚦 Combustível: **R$ {cv_comb_dia:.2f} por dia** (Total: R$ {cv_comb_mensal:.2f}/mês).")
 
@@ -429,7 +431,6 @@ def main_app():
             try:
                 faturamento_meta_iss = custo_base_total / (1 - (cp_iss/100) - (cp_icms/100) - (margem_iss/100))
                 prolabore_real = faturamento_meta_iss * (margem_iss / 100)
-                valor_hora_motorista = prolabore_real / horas_trabalhadas_mes if horas_trabalhadas_mes > 0 else 0
                 
                 col_r1, col_r2, col_r3 = st.columns(3)
                 col_r1.metric("Custo Fixo Total", f"R$ {total_cf_mensal:.2f} /mês")
@@ -440,19 +441,6 @@ def main_app():
                 st.markdown("### 💼 Inteligência de Pró-labore (O seu dinheiro)")
                 st.info(f"Ao faturar a meta acima, após pagar todos os custos e impostos da operação, sobrarão **R$ {prolabore_real:.2f} livres** para você ({margem_iss}%).")
                 
-                # Análise CLT
-                col_clt1, col_clt2 = st.columns(2)
-                with col_clt1:
-                    st.write(f"**Sua Jornada:** {horas_trabalhadas_mes:.0f} horas / mês")
-                    st.write(f"**Padrão CLT:** 220 horas / mês")
-                with col_clt2:
-                    st.write(f"**Sua Hora Trabalhada (Livre):** R$ {valor_hora_motorista:.2f}")
-                    
-                if horas_trabalhadas_mes > 220:
-                    st.warning("⚠️ Atenção: Sua carga horária está superior ao limite saudável estipulado pela CLT (44h semanais).")
-                else:
-                    st.success("✅ Sua carga horária está dentro do padrão saudável da CLT.")
-
                 # ---------------------------------------------------------
                 # NOVO: CARD DE RESUMO OPERACIONAL NA PISTA
                 # ---------------------------------------------------------
@@ -465,6 +453,14 @@ def main_app():
                 meta_hora = faturamento_meta_iss / horas_trabalhadas_mes if horas_trabalhadas_mes > 0 else 0
 
                 with st.container(border=True):
+                    # Lembrete da Jornada Planejada
+                    st.markdown("#### 📋 Sua Jornada Planejada")
+                    st.write(f"⏱️ **Tempo de Trabalho:** {horas_dia_trabalho}h/dia | {horas_trabalhadas_semana}h/semana | {horas_trabalhadas_mes:.0f}h/mês")
+                    st.write(f"🛣️ **Distância Mínima:** {km_dia:.0f} km/dia | {km_mensal:.0f} km/mês")
+                    
+                    st.markdown("---")
+                    
+                    # Metricas de Pista
                     col_res1, col_res2 = st.columns(2)
                     with col_res1:
                         st.markdown("**🔴 Seus Custos de Operação**")
@@ -472,10 +468,10 @@ def main_app():
                         st.write(f"Custo por Hora Trabalhada: **R$ {custo_hora:.2f}**")
                     with col_res2:
                         st.markdown("**🟢 Suas Metas de Faturamento**")
-                        st.write(f"Meta de ganho por KM: **R$ {meta_km:.2f}**")
-                        st.write(f"Meta de ganho por Hora: **R$ {meta_hora:.2f}**")
+                        st.write(f"Meta de ganho por KM **(mínimo)**: **R$ {meta_km:.2f}**")
+                        st.write(f"Meta de ganho por Hora **(mínimo)**: **R$ {meta_hora:.2f}**")
                         
-                    st.success(f"💡 **Regra de Ouro:** Para atingir o seu Pró-labore de R$ {prolabore_real:.2f}, não aceite corridas que paguem menos de **R$ {meta_km:.2f} por KM** ou que rendam menos de **R$ {meta_hora:.2f} por Hora**!")
+                    st.success(f"💡 **Regra de Ouro:** Para atingir o seu Pró-labore de R$ {prolabore_real:.2f}, cumpra rigorosamente sua jornada estipulada acima e **NÃO ACEITE** corridas que paguem menos de **R$ {meta_km:.2f} por KM** ou que rendam menos de **R$ {meta_hora:.2f} por Hora** (fazer menos é trabalhar no prejuízo)!")
                     
             except ZeroDivisionError:
                 st.error("Erro matemático: A soma dos percentuais de imposto e margem não pode ser 100% ou maior.")
