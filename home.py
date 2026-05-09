@@ -100,14 +100,40 @@ def login_user(username, password):
     return user
 
 def login_page():
-    st.markdown("<h1 style='text-align: center;'>🚗 Gestão Markup</h1>", unsafe_allow_html=True)
+    # Estilo CSS para centralizar e embelezar a tela
+    st.markdown("""
+        <style>
+        .main-title { text-align: center; font-size: 40px; font-weight: bold; margin-bottom: 30px; }
+        .google-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: white;
+            cursor: pointer;
+            text-decoration: none;
+            color: #444;
+            font-weight: 500;
+            margin-top: 20px;
+            transition: 0.3s;
+        }
+        .google-btn:hover { background-color: #f7f7f7; border-color: #ccc; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<div class='main-title'>🚗 Gestão Markup</div>", unsafe_allow_html=True)
     
     if 'auth_mode' not in st.session_state:
         st.session_state['auth_mode'] = 'login'
 
-    col_center, _ = st.columns([2, 1])
+    # Container centralizado
+    col_l, col_c, col_r = st.columns([1, 2, 1])
     
-    with col_center:
+    with col_c:
         if st.session_state['auth_mode'] == 'login':
             st.subheader("Acesse sua conta")
             u_input = st.text_input("Usuário ou E-mail")
@@ -127,13 +153,21 @@ def login_page():
                     st.session_state['auth_mode'] = 'signup'; st.rerun()
             
             st.button("Esqueci minha senha", on_click=lambda: st.session_state.update({'auth_mode': 'reset'}))
+            
+            # --- BOTÃO GOOGLE REAL ---
+            st.markdown("""
+                <a href="#" class="google-btn">
+                    <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" width="20px">
+                    Entrar com Google
+                </a>
+            """, unsafe_allow_html=True)
 
         elif st.session_state['auth_mode'] == 'signup':
             st.subheader("Novo Cadastro")
             nu = st.text_input("Usuário desejado")
             ne = st.text_input("E-mail real")
             np = st.text_input("Senha", type="password")
-            if st.button("Cadastrar", type="primary"):
+            if st.button("Finalizar Cadastro", type="primary", use_container_width=True):
                 try:
                     conn = get_db_connection(); c = conn.cursor(buffered=True)
                     c.execute("INSERT INTO usuarios (username, email, password) VALUES (%s, %s, %s)", (nu, ne, np))
@@ -145,11 +179,10 @@ def login_page():
 
         elif st.session_state['auth_mode'] == 'reset':
             st.subheader("Recuperar Senha")
-            re = st.text_input("E-mail cadastrado")
-            if st.button("Enviar Instruções"):
-                st.info(f"Se o e-mail {re} existir, você receberá instruções em breve.")
+            re = st.text_input("Digite seu e-mail cadastrado")
+            if st.button("Enviar link de recuperação", type="primary", use_container_width=True):
+                st.info(f"Se o e-mail {re} estiver em nossa base, você receberá instruções em instantes.")
             st.button("Voltar", on_click=lambda: st.session_state.update({'auth_mode': 'login'}))
-
 # --- 4. APP PRINCIPAL ---
 def main_app():
     username = st.session_state['username']
