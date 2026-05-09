@@ -42,13 +42,20 @@ def get_marcas():
 # --- 3. TELAS DE ACESSO ---
 def login_page():
     st.markdown("<h1 style='text-align: center;'>🚗 Gestão Markup</h1>", unsafe_allow_html=True)
-    if 'auth_mode' not in st.session_state: st.session_state['auth_mode'] = 'login'
+    
+    # Gerenciamento de sub-telas via Session State
+    if 'auth_mode' not in st.session_state: 
+        st.session_state['auth_mode'] = 'login'
     
     col_l, col_c, col_r = st.columns([1, 2, 1])
+    
     with col_c:
+        # TELA DE LOGIN
         if st.session_state['auth_mode'] == 'login':
+            st.subheader("Acesse sua conta")
             u = st.text_input("Usuário ou E-mail")
             p = st.text_input("Senha", type="password")
+            
             if st.button("Entrar", type="primary", use_container_width=True):
                 conn = get_db_connection()
                 c = conn.cursor(dictionary=True, buffered=True)
@@ -58,19 +65,64 @@ def login_page():
                 if user:
                     st.session_state['logged_in'], st.session_state['username'] = True, user['username']
                     st.rerun()
-                else: st.error("Acesso negado.")
-            if st.button("Criar Nova Conta"): st.session_state['auth_mode'] = 'signup'; st.rerun()
+                else: 
+                    st.error("Usuário ou senha incorretos.")
+            
+            # Botões de suporte ao acesso
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("Criar Nova Conta", use_container_width=True):
+                    st.session_state['auth_mode'] = 'signup'
+                    st.rerun()
+            with col_b2:
+                if st.button("Esqueci a Senha", use_container_width=True):
+                    st.session_state['auth_mode'] = 'reset'
+                    st.rerun()
         
+        # TELA DE CADASTRO
         elif st.session_state['auth_mode'] == 'signup':
-            nu, ne, np = st.text_input("Usuário"), st.text_input("E-mail"), st.text_input("Senha", type="password")
-            if st.button("Cadastrar"):
+            st.subheader("Crie sua conta")
+            nu = st.text_input("Usuário desejado")
+            ne = st.text_input("Seu E-mail")
+            np = st.text_input("Escolha uma Senha", type="password")
+            
+            if st.button("Finalizar Cadastro", type="primary", use_container_width=True):
                 try:
                     conn = get_db_connection(); c = conn.cursor(buffered=True)
                     c.execute("INSERT INTO usuarios (username, email, password) VALUES (%s, %s, %s)", (nu, ne, np))
                     conn.commit(); conn.close()
-                    st.success("Cadastrado!"); st.session_state['auth_mode'] = 'login'; st.rerun()
-                except: st.error("Erro no cadastro.")
-            st.button("Voltar", on_click=lambda: st.session_state.update({'auth_mode': 'login'}))
+                    st.success("Conta criada! Agora faça o login.")
+                    st.session_state['auth_mode'] = 'login'
+                    st.rerun()
+                except: 
+                    st.error("Este usuário ou e-mail já existe.")
+            
+            if st.button("Voltar para o Login"):
+                st.session_state['auth_mode'] = 'login'
+                st.rerun()
+
+        # TELA DE RECUPERAÇÃO DE SENHA
+        elif st.session_state['auth_mode'] == 'reset':
+            st.subheader("Recuperar Senha")
+            st.write("Digite seu e-mail para receber as instruções de recuperação.")
+            email_reset = st.text_input("E-mail cadastrado")
+            
+            if st.button("Enviar Link de Recuperação", type="primary", use_container_width=True):
+                # Busca rápida para ver se o e-mail existe no banco
+                conn = get_db_connection()
+                c = conn.cursor(buffered=True)
+                c.execute("SELECT * FROM usuarios WHERE email=%s", (email_reset,))
+                existe = c.fetchone()
+                conn.close()
+                
+                if existe:
+                    st.success(f"Se o e-mail {email_reset} estiver em nossa base, você receberá o link em instantes.")
+                else:
+                    st.error("E-mail não encontrado.")
+            
+            if st.button("Voltar para o Login"):
+                st.session_state['auth_mode'] = 'login'
+                st.rerun()
 
 # --- 4. APP PRINCIPAL ---
 def main_app():
