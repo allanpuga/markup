@@ -308,8 +308,12 @@ def main_app():
             
         fipe_atual = float(perfil['valor_fipe'])
         tipo_posse = perfil['tipo_posse']
-        dias_mensais = int(perfil['dias_semana']) * 4.33
+        horas_dia_trabalho = int(perfil['horas_dia'])
+        dias_semana_trabalho = int(perfil['dias_semana'])
+        
+        dias_mensais = dias_semana_trabalho * 4.33
         km_mensal = float(perfil['km_dia']) * dias_mensais
+        horas_trabalhadas_mes = horas_dia_trabalho * dias_mensais
 
         # ---------------------------------------------------------
         # BLOCO 1: CUSTOS FIXOS (Anuais e Mensais)
@@ -321,14 +325,13 @@ def main_app():
             
             col_a1, col_a2 = st.columns(2)
             with col_a1:
-                # Se for alugado, campos desativados e valor zero
                 cf_ipva = st.number_input("IPVA (Total Anual R$)", value=0.0 if is_alugado else fipe_atual * 0.04, disabled=is_alugado)
                 cf_licenciamento = st.number_input("Licenciamento (Total Anual R$)", value=0.0 if is_alugado else 160.0, disabled=is_alugado)
             with col_a2:
                 cf_seguro_obrig = st.number_input("Seguro Obrigatório/DPVAT (Anual R$)", value=0.0 if is_alugado else 50.0, disabled=is_alugado)
                 
                 if is_alugado:
-                    st.info("🚗 **Carro Alugado:** Isento de IPVA, Licenciamento e Seguro Próprio.")
+                    st.info("🚗 **Carro Alugado:** Isento de Seguro Próprio.")
                     cf_seguro_carro = 0.0
                 else:
                     tem_seguro = st.radio("Paga Seguro Privado / Proteção Veicular?", ["Sim", "Não"])
@@ -340,8 +343,8 @@ def main_app():
             st.markdown("#### 🗓️ Despesas Mensais Fixas")
             col_f1, col_f2 = st.columns(2)
             with col_f1:
-                cf_salario = st.number_input("Pró-labore / Salário DIEESE (Mensal R$)", value=7200.0)
-                cf_inss = st.number_input("INSS (11% Salário Mínimo R$)", value=155.32)
+                # Removido o campo de Salário Fixo. INSS/MEI mantido.
+                cf_inss = st.number_input("Contribuição INSS / MEI (Mensal R$)", value=155.32)
                 cf_internet = st.number_input("Plano de Internet Celular (Mensal R$)", value=60.0)
             
             with col_f2:
@@ -351,32 +354,32 @@ def main_app():
                 if is_alugado:
                     mensalidade_carro = float(perfil['valor_aluguel_semana']) * 4.33
                     st.write(f"**Aluguel Mensal Base:** R$ {mensalidade_carro:.2f}")
-                    cf_aluguel_extra = st.number_input("Custos Extras Locadora (Mensal R$)", value=0.0, help="Caução, seguro extra, taxa de limpeza, etc.")
+                    cf_aluguel_extra = st.number_input("Custos Extras Locadora (Mensal R$)", value=0.0, help="Caução, etc.")
                 elif is_financiado:
                     mensalidade_carro = float(perfil['valor_parcela'])
                     parcelas_rest = int(perfil['parcelas_restantes'])
                     cf_parcela = st.number_input("Parcela do Financiamento (Mensal R$)", value=mensalidade_carro)
-                    st.caption(f"Faltam **{parcelas_rest} parcelas** para quitar o veículo.")
-                    mensalidade_carro = cf_parcela # Atualiza se o usuário alterar
+                    st.caption(f"Faltam **{parcelas_rest} parcelas**.")
+                    mensalidade_carro = cf_parcela 
                 else:
-                    st.success("✅ Carro próprio quitado! Nenhuma mensalidade devida.")
+                    st.success("✅ Carro quitado! Nenhuma mensalidade devida.")
                 
             cf_depreciacao_mensal = 0.0 if is_alugado else (fipe_atual * 0.24) / 12
-            if not is_alugado: st.info(f"📉 **Depreciação Automática (24% aa):** R$ {cf_depreciacao_mensal:.2f} / mês")
+            if not is_alugado: st.info(f"📉 **Depreciação Automática:** R$ {cf_depreciacao_mensal:.2f} / mês")
             
-            total_cf_mensal = cf_anuais_mensalizado + cf_salario + cf_inss + cf_internet + mensalidade_carro + cf_aluguel_extra + cf_depreciacao_mensal
+            total_cf_mensal = cf_anuais_mensalizado + cf_inss + cf_internet + mensalidade_carro + cf_aluguel_extra + cf_depreciacao_mensal
 
         # ---------------------------------------------------------
-        # BLOCO 2: CUSTOS VARIÁVEIS (Combustível, Comida e Manutenção)
+        # BLOCO 2: CUSTOS VARIÁVEIS 
         # ---------------------------------------------------------
         with st.expander("⛽ Custo Variável (Rotina e Operação)", expanded=True):
             st.markdown("#### 🍽️ Alimentação e Rotina")
             col_r1, col_r2 = st.columns(2)
             with col_r1:
                 cv_alim_dia = st.number_input("Gasto com Alimentação (Por Dia R$)", value=30.0)
-                st.caption(f"Gasto Mensal Estimado: R$ {cv_alim_dia * dias_mensais:.2f}")
+                st.caption(f"Gasto Mensal: R$ {cv_alim_dia * dias_mensais:.2f}")
             with col_r2:
-                cv_lavagem = st.number_input("Gastos com Lavagem do Carro (Mensal R$)", value=120.0)
+                cv_lavagem = st.number_input("Lavagem do Carro (Mensal R$)", value=120.0)
 
             st.markdown("#### ⛽ Inteligência de Combustível")
             col_c1, col_c2, col_c3 = st.columns(3)
@@ -388,55 +391,69 @@ def main_app():
                 medida = "m³" if tipo_comb == "GNV (m³)" else "kWh" if tipo_comb == "Elétrico (kWh)" else "Litro"
                 consumo_comb = st.number_input(f"Faz quantos KM por {medida}?", value=10.0)
             
-            # Cálculo exato
             cv_comb_dia = (float(perfil['km_dia']) / consumo_comb) * preco_comb if consumo_comb > 0 else 0
             cv_comb_mensal = cv_comb_dia * dias_mensais
-            st.success(f"🚦 Seu gasto com combustível será de **R$ {cv_comb_dia:.2f} por dia** (Total: R$ {cv_comb_mensal:.2f}/mês).")
+            st.success(f"🚦 Combustível: **R$ {cv_comb_dia:.2f} por dia** (Total: R$ {cv_comb_mensal:.2f}/mês).")
 
             st.markdown("#### 🔧 Manutenção Mecânica")
-            if is_alugado:
-                st.info("💡 **Dica:** Carros alugados têm manutenção inclusa pela locadora. Os campos foram zerados automaticamente para você.")
+            if is_alugado: st.info("💡 Carros alugados têm manutenção inclusa pela locadora.")
             
             col_m1, col_m2, col_m3 = st.columns(3)
-            with col_m1:
-                cv_manut_mensal = st.number_input("Manutenção Média (Mensal R$)", value=0.0 if is_alugado else 150.0)
+            with col_m1: cv_manut_mensal = st.number_input("Manutenção Média (Mensal R$)", value=0.0 if is_alugado else 150.0)
             with col_m2:
-                cv_oleo = st.number_input("Troca de Óleo (Por 10k KM R$)", value=0.0 if is_alugado else 250.0)
-                cv_alinhamento = st.number_input("Alinhamento (Por 10k KM R$)", value=0.0 if is_alugado else 100.0)
-            with col_m3:
-                cv_pneu = st.number_input("Jogo de Pneus (Por 30k KM R$)", value=0.0 if is_alugado else 1600.0)
+                cv_oleo = st.number_input("Troca de Óleo (Por 10k KM)", value=0.0 if is_alugado else 250.0)
+                cv_alinhamento = st.number_input("Alinhamento (Por 10k KM)", value=0.0 if is_alugado else 100.0)
+            with col_m3: cv_pneu = st.number_input("Jogo de Pneus (Por 30k KM)", value=0.0 if is_alugado else 1600.0)
 
             total_cv_mensal = (cv_alim_dia * dias_mensais) + cv_comb_mensal + cv_lavagem + cv_manut_mensal + \
                               (cv_oleo / 10000 * km_mensal) + (cv_alinhamento / 10000 * km_mensal) + (cv_pneu / 30000 * km_mensal)
 
         # ---------------------------------------------------------
-        # BLOCO 3: IMPOSTOS E RELATÓRIO FINAL
+        # BLOCO 3: IMPOSTOS E MARGEM (PRÓ-LABORE)
         # ---------------------------------------------------------
-        with st.expander("📈 Impostos e Margem (CP)"):
+        with st.expander("📈 Impostos e Margem (Pró-labore)"):
             ipca_atual = get_ipca()
-            st.write(f"**Inflação IPCA (Automático Banco Central):** {ipca_atual}%")
+            st.write(f"**Inflação IPCA (Automático BCB):** {ipca_atual}%")
             col_p1, col_p2 = st.columns(2)
             with col_p1:
-                cp_iss = st.number_input("ISS / IBS (%)", value=5.0)
-                margem_iss = st.number_input("Margem de Lucro Desejada (%)", value=20.0)
+                cp_iss = st.number_input("Imposto Municipal / Federal (%)", value=5.0)
+                margem_iss = st.number_input("Sua Margem de Lucro / Pró-labore (%)", value=30.0, help="Esta margem será o seu salário (dinheiro limpo) no fim do mês.")
             with col_p2:
-                cp_icms = st.number_input("ICMS / IBS (%)", value=0.0)
+                cp_icms = st.number_input("ICMS / Outras Taxas (%)", value=0.0)
 
         if st.button("Gerar Relatório de Faturamento Ideal", type="primary", use_container_width=True):
             st.markdown("### 🏆 Sua Meta Financeira")
             cp_irpf = ((total_cf_mensal + total_cv_mensal) * 0.60) * 0.11
             
-            col_r1, col_r2, col_r3 = st.columns(3)
-            col_r1.metric("Total Custo Fixo", f"R$ {total_cf_mensal:.2f} /mês")
-            col_r2.metric("Total Custo Variável", f"R$ {total_cv_mensal:.2f} /mês")
-            col_r3.metric("Provisão IRPF Mensal", f"R$ {cp_irpf:.2f}")
-            
             custo_base_total = total_cf_mensal + total_cv_mensal + cp_irpf
             
             try:
-                faturamento_meta_iss = custo_base_total / (1 - (cp_iss/100) - (margem_iss/100))
-                st.success(f"🎯 Faturamento Bruto Necessário: **R$ {faturamento_meta_iss:.2f} / mês**")
-                st.info(f"💵 Valor Base a ser cobrado por KM Rodado: **R$ {faturamento_meta_iss / km_mensal:.2f}**")
+                faturamento_meta_iss = custo_base_total / (1 - (cp_iss/100) - (cp_icms/100) - (margem_iss/100))
+                prolabore_real = faturamento_meta_iss * (margem_iss / 100)
+                valor_hora_motorista = prolabore_real / horas_trabalhadas_mes if horas_trabalhadas_mes > 0 else 0
+                
+                col_r1, col_r2, col_r3 = st.columns(3)
+                col_r1.metric("Custo Fixo Total", f"R$ {total_cf_mensal:.2f} /mês")
+                col_r2.metric("Custo Variável Total", f"R$ {total_cv_mensal:.2f} /mês")
+                col_r3.metric("Faturamento Necessário", f"R$ {faturamento_meta_iss:.2f} /mês")
+                
+                st.markdown("---")
+                st.markdown("### 💼 Inteligência de Pró-labore (O seu dinheiro)")
+                st.info(f"Ao faturar a meta acima, após pagar todos os custos e impostos da operação, sobrarão **R$ {prolabore_real:.2f} livres** para você ({margem_iss}%).")
+                
+                # Análise CLT
+                col_clt1, col_clt2 = st.columns(2)
+                with col_clt1:
+                    st.write(f"**Sua Jornada:** {horas_trabalhadas_mes:.0f} horas / mês")
+                    st.write(f"**Padrão CLT:** 220 horas / mês")
+                with col_clt2:
+                    st.write(f"**Sua Hora Trabalhada (Livre):** R$ {valor_hora_motorista:.2f}")
+                    
+                if horas_trabalhadas_mes > 220:
+                    st.warning("⚠️ Atenção: Sua carga horária está superior ao limite saudável estipulado pela CLT (44h semanais).")
+                else:
+                    st.success("✅ Sua carga horária está dentro do padrão saudável da CLT.")
+                    
             except ZeroDivisionError:
                 st.error("Erro matemático: A soma dos percentuais de imposto e margem não pode ser 100% ou maior.")
 
