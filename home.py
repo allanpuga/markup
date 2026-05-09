@@ -15,12 +15,19 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     c = conn.cursor()
-    # Usuários (com E-mail para recuperação)
+    
+    # Cria a tabela se não existir
     c.execute('''CREATE TABLE IF NOT EXISTS usuarios 
                  (id INT AUTO_INCREMENT PRIMARY KEY, 
                   username VARCHAR(255) UNIQUE, 
-                  password VARCHAR(255),
-                  email VARCHAR(255) UNIQUE)''')
+                  password VARCHAR(255))''')
+    
+    # Verifica se a coluna 'email' existe, se não, adiciona ela
+    try:
+        c.execute("SELECT email FROM usuarios LIMIT 1")
+    except:
+        st.info("Atualizando estrutura do banco de dados...")
+        c.execute("ALTER TABLE usuarios ADD COLUMN email VARCHAR(255) UNIQUE")
     
     # Perfil
     c.execute('''CREATE TABLE IF NOT EXISTS perfil_motorista 
@@ -43,6 +50,7 @@ def init_db():
                   preco_comb FLOAT, consumo_comb FLOAT, tipo_comb VARCHAR(50),
                   cv_manut_mensal FLOAT, cv_oleo FLOAT, cv_alinhamento FLOAT, cv_pneu FLOAT,
                   cp_iss FLOAT, cp_icms FLOAT, margem_iss FLOAT, UNIQUE KEY (user_id, veiculo_id))''')
+    
     conn.commit()
     conn.close()
 
