@@ -455,8 +455,12 @@ def main_app():
         st.session_state["logged_in"] = False
         st.rerun()
 
-    # Carrega perfil do banco
-    perfil = _carregar_perfil(username)
+    # Carrega perfil do banco apenas quando necessário (evita query a cada rerun)
+    cache_key = f"perfil_{username}"
+    if cache_key not in st.session_state or st.session_state.get("_perfil_dirty"):
+        st.session_state[cache_key] = _carregar_perfil(username)
+        st.session_state["_perfil_dirty"] = False
+    perfil = st.session_state[cache_key]
 
     # ── ETAPA 1: PERFIL ─────────────────────────
     if menu_opcao == "1️⃣ Meu Perfil":
@@ -563,6 +567,7 @@ def _pagina_perfil(username: str, perfil: dict | None):
                     (username, nome, email, uf_save, cidade_sel),
                 )
             conn.commit()
+            st.session_state["_perfil_dirty"] = True  # força reload do cache
             st.session_state["mudar_aba"] = "2️⃣ Veículos e Jornada"
             st.rerun()
         except mysql.connector.Error as e:
@@ -580,12 +585,18 @@ def _pagina_garagem(username: str, perfil: dict | None):
         return
 
     # ── Rotina ──────────────────────────────────
-    with st.container(border=True):
+    # st.form evita rerun a cada movimento de slider
+    with st.form("form_rotina"):
         st.markdown("### 🕒 Sua Rotina na Pista")
         d_sem = st.slider("Dias por Semana", 1, 7,  int(perfil["dias_semana"]))
         h_dia = st.slider("Horas por Dia",   1, 24, int(perfil["horas_dia"]))
-        # Mantido como float sem truncamento
         k_dia = st.number_input("KM Médio por Dia", value=float(perfil["km_dia"]), min_value=0.0, step=0.5)
+        _submit_rotina = st.form_submit_button("✅ Atualizar Jornada")
+    
+    if not _submit_rotina:
+        d_sem = int(perfil["dias_semana"])
+        h_dia = int(perfil["horas_dia"])
+        k_dia = float(perfil["km_dia"])
 
     # ── Garagem ─────────────────────────────────
     with st.container(border=True):
@@ -706,6 +717,7 @@ def _pagina_garagem(username: str, perfil: dict | None):
                 (d_sem, h_dia, k_dia, v_ativo_id, username),
             )
             conn.commit()
+            st.session_state["_perfil_dirty"] = True  # força reload do cache
             st.session_state["mudar_aba"] = "3️⃣ Calculadora de Markup"
             st.rerun()
         except mysql.connector.Error as e:
@@ -756,43 +768,48 @@ def _pagina_calculadora(username: str, perfil: dict | None):
         f"| Posse: {veiculo['tipo_posse']} | FIPE: {veiculo['fipe_str']}"
     )
 
-    with st.expander("📝 Custos Fixos e Mensalidades", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            ipva  = st.number_input("IPVA Anual (R$)",              value=val("cf_ipva",         0.0 if is_al else round(fipe_v * 0.04, 2)), disabled=is_al)
-            licenc = st.number_input("Licenciamento Anual (R$)",    value=val("cf_licenciamento", 0.0 if is_al else 160.0),                  disabled=is_al)
-            seg_p  = st.number_input("Seguro Privado Anual (R$)",   value=val("cf_seguro_carro",  0.0 if is_al else 2500.0),                 disabled=is_al)
-        with col2:
-            inss    = st.number_input("INSS/MEI Mensal (R$)",       value=val("cf_inss",    155.32))
-            internet = st.number_input("Internet Mensal (R$)",      value=val("cf_internet",  60.0))
-            deprec   = 0.0 if is_al else round((fipe_v * 0.24) / 12, 2)
-            st.metric("Depreciação Mensal (24% aa)", f"R$ {deprec:.2f}")
+    deprec = 0.0 if is_al else round((fipe_v * 0.24) / 12, 2)
 
-    with st.expander("⛽ Operação Diária e Variáveis", expanded=True):
-        col3, col4, col5 = st.columns(3)
-        with col3:
-            p_comb = st.number_input("Preço Combustível (R$/L)", value=val("preco_comb",   5.80), step=0.10)
-            cons   = st.number_input("Consumo (KM/L)",           value=val("consumo_comb", 10.0), step=0.5)
-        with col4:
-            alim   = st.number_input("Alimentação/Dia (R$)",     value=val("cv_alim_dia",  30.0))
-            lavagem = st.number_input("Lavagem/Mês (R$)",        value=val("cv_lavagem",  120.0))
-        with col5:
-            manut_m = st.number_input("Manutenção/Reserva Mês (R$)", value=val("cv_manut_mensal", 0.0 if is_al else 150.0))
-            oleo    = st.number_input("Troca de Óleo (por 10k KM)",  value=val("cv_oleo",          0.0 if is_al else 250.0))
-            pneu    = st.number_input("Pneus (por 30k KM)",          value=val("cv_pneu",          0.0 if is_al else 1600.0))
+    # st.form agrupa todos os inputs: nenhum rerun até clicar em Gerar
+    with st.form("form_custos"):
+        with st.expander("📝 Custos Fixos e Mensalidades", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                ipva   = st.number_input("IPVA Anual (R$)",            value=val("cf_ipva",         0.0 if is_al else round(fipe_v * 0.04, 2)), disabled=is_al)
+                licenc = st.number_input("Licenciamento Anual (R$)",   value=val("cf_licenciamento", 0.0 if is_al else 160.0),                  disabled=is_al)
+                seg_p  = st.number_input("Seguro Privado Anual (R$)",  value=val("cf_seguro_carro",  0.0 if is_al else 2500.0),                 disabled=is_al)
+            with col2:
+                inss     = st.number_input("INSS/MEI Mensal (R$)",     value=val("cf_inss",    155.32))
+                internet = st.number_input("Internet Mensal (R$)",     value=val("cf_internet",  60.0))
+                st.metric("Depreciação Mensal (24% aa)", f"R$ {deprec:.2f}")
 
-    with st.expander("📈 Margem e Impostos", expanded=True):
-        col6, col7 = st.columns(2)
-        with col6:
-            margem = st.number_input("Sua Margem de Lucro (%)", value=val("margem_iss", 30.0), min_value=0.0, max_value=99.0)
-        with col7:
-            iss    = st.number_input("Imposto/Taxa (%)",        value=val("cp_iss",       5.0), min_value=0.0, max_value=99.0)
+        with st.expander("⛽ Operação Diária e Variáveis", expanded=True):
+            col3, col4, col5 = st.columns(3)
+            with col3:
+                p_comb = st.number_input("Preço Combustível (R$/L)", value=val("preco_comb",   5.80), step=0.10)
+                cons   = st.number_input("Consumo (KM/L)",           value=val("consumo_comb", 10.0), step=0.5)
+            with col4:
+                alim    = st.number_input("Alimentação/Dia (R$)",    value=val("cv_alim_dia",  30.0))
+                lavagem = st.number_input("Lavagem/Mês (R$)",        value=val("cv_lavagem",  120.0))
+            with col5:
+                manut_m = st.number_input("Manutenção/Reserva Mês (R$)", value=val("cv_manut_mensal", 0.0 if is_al else 150.0))
+                oleo    = st.number_input("Troca de Óleo (por 10k KM)",  value=val("cv_oleo",          0.0 if is_al else 250.0))
+                pneu    = st.number_input("Pneus (por 30k KM)",          value=val("cv_pneu",          0.0 if is_al else 1600.0))
 
-        if margem + iss >= 100:
-            st.error("⚠️ Margem + Imposto não pode atingir 100%. Ajuste os valores.")
-            return
+        with st.expander("📈 Margem e Impostos", expanded=True):
+            col6, col7 = st.columns(2)
+            with col6:
+                margem = st.number_input("Sua Margem de Lucro (%)", value=val("margem_iss", 30.0), min_value=0.0, max_value=99.0)
+            with col7:
+                iss    = st.number_input("Imposto/Taxa (%)",        value=val("cp_iss",       5.0), min_value=0.0, max_value=99.0)
 
-    if st.button("🚀 Gerar Resultados de Markup", type="primary", use_container_width=True):
+        submitted = st.form_submit_button("🚀 Gerar Resultados de Markup", type="primary", use_container_width=True)
+
+    if submitted and margem + iss >= 100:
+        st.error("⚠️ Margem + Imposto não pode atingir 100%. Ajuste os valores.")
+        submitted = False
+
+    if submitted:
         conn = None
         try:
             conn = get_db_connection()
