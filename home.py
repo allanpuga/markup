@@ -32,20 +32,78 @@ def get_db_connection():
 
 
 def init_db():
-    """Cria as tabelas necessárias caso não existam."""
+    """Cria as tabelas necessárias e migra schema legado caso necessário."""
     conn = None
     try:
         conn = get_db_connection()
         c = conn.cursor(buffered=True)
 
+        # Cria tabela de usuários com schema novo
         c.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 username VARCHAR(255) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
+                password_hash VARCHAR(255) NOT NULL DEFAULT '',
                 email VARCHAR(255) UNIQUE NOT NULL
             )
         """)
+
+        # Migração: coluna legado 'password' -> 'password_hash'
+        c.execute("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME   = 'usuarios'
+              AND COLUMN_NAME  = 'password'
+        """)
+        has_legacy_col = c.fetchone()[0] > 0
+
+        if has_legacy_col:
+            # Garante que password_hash existe
+            c.execute("""
+                SELECT COUNT(*) FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME   = 'usuarios'
+                  AND COLUMN_NAME  = 'password_hash'
+            """)
+            if c.fetchone()[0] == 0:
+                c.execute(
+                    "ALTER TABLE usuarios ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''"
+                )
+            # Copia senhas antigas com prefixo para serem migradas no 1o login
+            c.execute("""
+                UPDATE usuarios
+                SET password_hash = CONCAT('__LEGACY__', `password`)
+                WHERE password_hash = '' OR password_hash IS NULL
+            """)
+            conn.commit()
+
+        # ── Migração: coluna legado 'password' → 'password_hash' ──────────
+        # Verifica se a coluna antiga ainda existe
+        c.execute("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME   = 'usuarios'
+              AND COLUMN_NAME  = 'password'
+        """)
+        if c.fetchone()[0] > 0:
+            # Adiciona password_hash se ainda não existir
+            c.execute("""
+                SELECT COUNT(*) FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME   = 'usuarios'
+                  AND COLUMN_NAME  = 'password_hash'
+            """)
+            if c.fetchone()[0] == 0:
+                c.execute("ALTER TABLE usuarios ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''")
+
+            # Marca usuários legado com prefixo especial para forçar redefinição
+            c.execute("""
+                UPDATE usuarios
+                SET password_hash = CONCAT('__LEGACY__', `password`)
+                WHERE password_hash = '' OR password_hash IS NULL
+            """)
+            conn.commit()
+        # ──────────────────────────────────────────────────────────────────
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS perfil_motorista (
@@ -232,7 +290,13 @@ def get_valor_fipe(marca_id: str, modelo_id: str, ano_id: str) -> dict | None:
 # ─────────────────────────────────────────────
 
 def login_user(identifier: str, password: str) -> dict | None:
-    """Autentica por username ou e-mail com verificação de hash bcrypt."""
+    """
+    Autentica por username ou e-mail.
+    Suporta dois casos:
+      1. Hash bcrypt normal  -> verifica com bcrypt
+      2. Conta legado        -> senha em texto puro prefixada com '__LEGACY__'
+         Ao autenticar com sucesso, migra automaticamente para bcrypt.
+    """
     conn = None
     try:
         conn = get_db_connection()
@@ -242,9 +306,35 @@ def login_user(identifier: str, password: str) -> dict | None:
             (identifier, identifier),
         )
         user = c.fetchone()
-        if user and verify_password(password, user["password_hash"]):
+        if not user:
+            return None
+
+        stored = user.get("password_hash", "")
+
+        # Conta legado (senha plain-text marcada com prefixo)
+        if stored.startswith("__LEGACY__"):
+            plain_stored = stored[len("__LEGACY__"):]
+            if password != plain_stored:
+                return None
+            # Migra para bcrypt agora que sabemos a senha correta
+            new_hash = hash_password(password)
+            try:
+                upd = conn.cursor(buffered=True)
+                upd.execute(
+                    "UPDATE usuarios SET password_hash=%s WHERE id=%s",
+                    (new_hash, user["id"]),
+                )
+                conn.commit()
+            except mysql.connector.Error:
+                pass  # falha silenciosa; na proxima tentativa repete
             return user
+
+        # Conta normal com bcrypt
+        if verify_password(password, stored):
+            return user
+
         return None
+
     except mysql.connector.Error as e:
         st.error(f"Erro de banco ao autenticar: {e}")
         return None
