@@ -493,13 +493,33 @@ def _carregar_perfil(username: str) -> dict | None:
             conn.close()
 
 
+def _email_cadastro(username: str) -> str:
+    """Busca o e-mail registrado na tabela de usuários."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        c = conn.cursor(dictionary=True, buffered=True)
+        c.execute("SELECT email FROM usuarios WHERE username=%s", (username,))
+        row = c.fetchone()
+        return row["email"] if row else ""
+    except mysql.connector.Error:
+        return ""
+    finally:
+        if conn:
+            conn.close()
+
+
 def _pagina_perfil(username: str, perfil: dict | None):
     st.title("👤 Configuração de Perfil")
 
     p_nome   = perfil["nome"]   if perfil else ""
-    p_email  = perfil["email"]  if perfil else ""
     p_estado = perfil["estado"] if perfil else "Selecione..."
     p_cidade = perfil["cidade"] if perfil else "Selecione..."
+
+    # E-mail: usa o do perfil se já salvo, senão puxa do cadastro de usuário
+    p_email = (perfil["email"] or "") if perfil else ""
+    if not p_email:
+        p_email = _email_cadastro(username)
 
     col1, col2 = st.columns(2)
     with col1:
